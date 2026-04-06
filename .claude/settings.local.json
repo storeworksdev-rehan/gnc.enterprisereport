@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "WebFetch(domain:localhost)",
+      "Bash(npm list:*)",
+      "WebFetch(domain:www.gnc.com)",
+      "WebFetch(domain:gnc.com)",
+      "Bash(curl -sI https://www.gnc.com)",
+      "Bash(curl -sL -I https://www.gnc.com)",
+      "Bash(curl -sL -H \"User-Agent: Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/91.0.4472.124 Safari/537.36\" https://www.gnc.com)",
+      "WebSearch",
+      "WebFetch(domain:brandfetch.com)",
+      "WebFetch(domain:1000logos.net)",
+      "WebFetch(domain:logotyp.us)",
+      "WebFetch(domain:logowik.com)",
+      "WebFetch(domain:www.color-hex.com)",
+      "WebFetch(domain:kreafolk.com)",
+      "Bash(curl -L \"https://upload.wikimedia.org/wikipedia/commons/d/d8/GNC-Logo.png\" -o \"c:/Users/StoreworksDev01/Documents/gnc.enterprisereport/public/gnc-logo.png\")",
+      "WebFetch(domain:)"
+    ]
+  }
+}

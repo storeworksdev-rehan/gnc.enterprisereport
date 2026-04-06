@@ -24,3 +24,148 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@keyframes blob {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(20px, -10px) scale(1.05);
+  }
+  66% {
+    transform: translate(-20px, 15px) scale(0.95);
+  }
+}
+
+@keyframes pulse-card {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  }
+  50% {
+    transform: translateY(-4px) scale(1.005);
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.28);
+  }
+}
+
+@keyframes gradient-motion {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-blob {
+  animation: blob 12s infinite ease-in-out;
+}
+
+.animate-pulse-card {
+  animation: pulse-card 6s infinite ease-in-out;
+}
+
+.animate-gradient-background {
+  animation: gradient-motion 18s ease infinite;
+  background: linear-gradient(120deg, #0f172a, #111827, #0f172a, #1e293b);
+  background-size: 240% 240%;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
+
+/* ── Button system ────────────────────────────────────────────────────────── */
+
+/* Base */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: 0.5rem 1.25rem;
+  transition: background-color 0.15s, opacity 0.15s;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:disabled,
+.btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Primary — GNC red */
+.btn-primary {
+  background-color: #e31837;
+  color: #ffffff;
+}
+.btn-primary:hover:not(:disabled):not(.disabled) {
+  background-color: #c91530;
+}
+
+/* Secondary — outlined */
+.btn-secondary {
+  background-color: #ffffff;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+.btn-secondary:hover:not(:disabled):not(.disabled) {
+  background-color: #f8fafc;
+}
+
+/* Warning — amber */
+.btn-warning {
+  background-color: #f59e0b;
+  color: #ffffff;
+}
+.btn-warning:hover:not(:disabled):not(.disabled) {
+  background-color: #d97706;
+}
+
+/* ── Icon buttons ─────────────────────────────────────────────────────────── */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  transition: background-color 0.15s;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.btn-icon-refresh {
+  background-color: #f1f5f9;
+  color: #475569;
+}
+.btn-icon-refresh:hover { background-color: #e2e8f0; }
+
+.btn-icon-edit {
+  background-color: #eff6ff;
+  color: #2563eb;
+}
+.btn-icon-edit:hover { background-color: #dbeafe; }
+
+.btn-icon-delete {
+  background-color: #fef2f2;
+  color: #ef4444;
+}
+.btn-icon-delete:hover { background-color: #fee2e2; }
+
+.btn-icon-key {
+  background-color: #fffbeb;
+  color: #d97706;
+}
+.btn-icon-key:hover { background-color: #fef3c7; }

@@ -17,9 +17,7 @@ import {
   CalendarDays,
 } from "lucide-react";
 import SalesAnalyticsModal from "@/components/SalesAnalyticsModal";
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_SERVER_API || "https://localhost:44358/api";
+import { API_BASE } from "@/lib/config";
 
 interface ApiRow {
   LocationId: string;

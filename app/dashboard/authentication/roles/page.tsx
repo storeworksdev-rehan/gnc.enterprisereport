@@ -12,9 +12,7 @@ import {
   RefreshCw,
   Search,
 } from "lucide-react";
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_SERVER_API + "/api" || "https://localhost:44358/api";
+import { API_BASE_API as API_BASE } from "@/lib/config";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface PageItem {
@@ -143,7 +141,9 @@ export default function RolesPage() {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await axios.get<Role[]>(`${API_BASE}/auth/get-roles`);
+      const { data } = await axios.get<Role[]>(
+        `${API_BASE}/api/auth/get-roles`,
+      );
       setRoles(data);
       setMasterPages(buildMasterPages(data));
       setMasterFeatures(buildMasterFeatures(data));
@@ -199,9 +199,9 @@ export default function RolesPage() {
     setError(null);
     try {
       if (isNew) {
-        await axios.post(`${API_BASE}/auth/create-role`, form);
+        await axios.post(`${API_BASE}/api/auth/create-role`, form);
       } else {
-        await axios.post(`${API_BASE}/auth/update-role`, form);
+        await axios.post(`${API_BASE}/api/auth/update-role`, form);
       }
       await fetchRoles();
       handleCancel();

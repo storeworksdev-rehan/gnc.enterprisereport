@@ -3,9 +3,7 @@
 import { FormEvent, useState } from "react";
 import axios from "axios";
 import { Eye, EyeOff } from "lucide-react";
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_SERVER_API || "https://localhost:44358/api";
+import { API_BASE } from "@/lib/config";
 
 export default function Home() {
   const [email, setEmail] = useState("");

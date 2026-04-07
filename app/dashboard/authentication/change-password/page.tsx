@@ -2,10 +2,15 @@
 
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { Eye, EyeOff, KeyRound, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_SERVER_API + "/api" || "https://localhost:44358/api";
+import {
+  Eye,
+  EyeOff,
+  KeyRound,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+} from "lucide-react";
+import { API_BASE_API as API_BASE } from "@/lib/config";
 
 interface StoredUser {
   UserId: number;
@@ -40,7 +45,10 @@ export default function ChangePasswordPage() {
     }
   }, []);
 
-  const mismatch = form.NewPassword && form.ConfirmPassword && form.NewPassword !== form.ConfirmPassword;
+  const mismatch =
+    form.NewPassword &&
+    form.ConfirmPassword &&
+    form.NewPassword !== form.ConfirmPassword;
   const canSubmit =
     form.CurrentPassword.trim() &&
     form.NewPassword.trim() &&
@@ -57,7 +65,7 @@ export default function ChangePasswordPage() {
     setMessage("");
 
     try {
-      await axios.post(`${API_BASE}/auth/change-password`, {
+      await axios.post(`${API_BASE}/api/auth/change-password`, {
         UserId: user.UserId,
         CurrentPassword: form.CurrentPassword,
         NewPassword: form.NewPassword,
@@ -68,9 +76,14 @@ export default function ChangePasswordPage() {
       setForm({ CurrentPassword: "", NewPassword: "", ConfirmPassword: "" });
     } catch (err: unknown) {
       setStatus("error");
-      const e = err as { response?: { data?: { message?: string } }; message?: string };
+      const e = err as {
+        response?: { data?: { message?: string } };
+        message?: string;
+      };
       setMessage(
-        e?.response?.data?.message || e?.message || "Failed to change password. Please check your current password and try again."
+        e?.response?.data?.message ||
+          e?.message ||
+          "Failed to change password. Please check your current password and try again.",
       );
     }
   };
@@ -79,17 +92,22 @@ export default function ChangePasswordPage() {
     key: keyof typeof form,
     label: string,
     placeholder: string,
-    hint?: string
+    hint?: string,
   ) => (
     <div>
-      <label className="block text-sm font-medium text-slate-700 mb-1.5">{label}</label>
+      <label className="block text-sm font-medium text-slate-700 mb-1.5">
+        {label}
+      </label>
       <div className="relative">
         <input
           type={show[key] ? "text" : "password"}
           value={form[key]}
           onChange={(e) => {
             setForm((f) => ({ ...f, [key]: e.target.value }));
-            if (status !== "idle") { setStatus("idle"); setMessage(""); }
+            if (status !== "idle") {
+              setStatus("idle");
+              setMessage("");
+            }
           }}
           placeholder={placeholder}
           className={`w-full rounded-lg border bg-white px-3.5 py-2.5 pr-10 text-sm text-slate-900 placeholder-slate-400 shadow-sm outline-none transition
@@ -102,7 +120,11 @@ export default function ChangePasswordPage() {
           className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-600 transition"
           tabIndex={-1}
         >
-          {show[key] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          {show[key] ? (
+            <EyeOff className="h-4 w-4" />
+          ) : (
+            <Eye className="h-4 w-4" />
+          )}
         </button>
       </div>
       {hint && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
@@ -122,31 +144,52 @@ export default function ChangePasswordPage() {
               <KeyRound className="h-4 w-4 text-[#e31837]" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-800">Change Password</p>
+              <p className="text-sm font-semibold text-slate-800">
+                Change Password
+              </p>
               {user && (
                 <p className="text-xs text-slate-400">
-                  Signed in as <span className="font-medium text-slate-600">{user.Username}</span>
+                  Signed in as{" "}
+                  <span className="font-medium text-slate-600">
+                    {user.Username}
+                  </span>
                 </p>
               )}
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="px-6 py-6 space-y-5">
-            {field("CurrentPassword", "Current Password", "Enter your current password")}
-            {field("NewPassword", "New Password", "Enter a new password", "Minimum 6 characters recommended.")}
-            {field("ConfirmPassword", "Confirm New Password", "Re-enter your new password")}
+            {field(
+              "CurrentPassword",
+              "Current Password",
+              "Enter your current password",
+            )}
+            {field(
+              "NewPassword",
+              "New Password",
+              "Enter a new password",
+              "Minimum 6 characters recommended.",
+            )}
+            {field(
+              "ConfirmPassword",
+              "Confirm New Password",
+              "Re-enter your new password",
+            )}
 
             {/* Feedback banner */}
             {message && (
-              <div className={`flex items-start gap-3 rounded-lg px-4 py-3 text-sm border ${
-                status === "success"
-                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                  : "bg-red-50 border-red-200 text-red-800"
-              }`}>
-                {status === "success"
-                  ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-                  : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
-                }
+              <div
+                className={`flex items-start gap-3 rounded-lg px-4 py-3 text-sm border ${
+                  status === "success"
+                    ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                    : "bg-red-50 border-red-200 text-red-800"
+                }`}
+              >
+                {status === "success" ? (
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                ) : (
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+                )}
                 <span>{message}</span>
               </div>
             )}
@@ -154,13 +197,19 @@ export default function ChangePasswordPage() {
             <div className="flex justify-end pt-1">
               <button
                 type="submit"
-                onClick={() => { if (!canSubmit) return; }}
+                onClick={() => {
+                  if (!canSubmit) return;
+                }}
                 className={`btn btn-primary flex items-center gap-2 ${!canSubmit ? "disabled" : ""}`}
               >
                 {status === "saving" ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Saving…
+                  </>
                 ) : (
-                  <><KeyRound className="h-4 w-4" /> Change Password</>
+                  <>
+                    <KeyRound className="h-4 w-4" /> Change Password
+                  </>
                 )}
               </button>
             </div>

@@ -17,9 +17,7 @@ import {
   BarChart2,
 } from "lucide-react";
 import DealAnalytics from "@/components/DealAnalytics";
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_SERVER_API || "https://localhost:44358/api";
+import { API_BASE } from "@/lib/config";
 
 interface ApiRow {
   LocationId: string;

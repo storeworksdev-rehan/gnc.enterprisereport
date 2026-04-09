@@ -14,6 +14,7 @@ const pageTitles: Record<string, string> = {
   "/dashboard/settings": "Settings",
   "/dashboard/authentication/roles": "Roles",
   "/dashboard/authentication/users": "Users",
+  "/dashboard/authentication/regions": "Regions",
   "/dashboard/authentication/change-password": "Change Password",
 };
 

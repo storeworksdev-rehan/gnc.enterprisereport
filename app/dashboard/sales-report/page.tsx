@@ -78,7 +78,7 @@ type Tab = "table" | "analytics";
 export default function SalesReportPage() {
   const [data, setData] = useState<ApiRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError]           = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [filterError, setFilterError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("table");
 
@@ -90,9 +90,9 @@ export default function SalesReportPage() {
   // ── Searchable location select ───────────────────────────────────
   const [locSearch, setLocSearch] = useState("");
   const [locOpen, setLocOpen] = useState(false);
-  const locRef     = useRef<HTMLDivElement>(null);
-  const fromRef    = useRef<HTMLInputElement>(null);
-  const toRef      = useRef<HTMLInputElement>(null);
+  const locRef = useRef<HTMLDivElement>(null);
+  const fromRef = useRef<HTMLInputElement>(null);
+  const toRef = useRef<HTMLInputElement>(null);
 
   // ── Location list from API ───────────────────────────────────────
   const [knownLocations, setKnownLocations] = useState<
@@ -104,10 +104,12 @@ export default function SalesReportPage() {
   const [page, setPage] = useState(1);
 
   useEffect(() => {
+    const enterpriseUser = JSON.parse(
+      localStorage.getItem("enterprise_user") ?? "{}",
+    );
     axios
-      .post<{ Id: number; Name: string }[]>(
-        `${API_BASE}/ITDashboard/GetStores`,
-        { DivisionId: 0 },
+      .get<{ Id: number; Name: string }[]>(
+        `${API_BASE}/api/ITCentralServer/get-user-stores?regionIds=${enterpriseUser?.RegionIds ?? ""}`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("enterprise_auth_token") ?? ""}`,
@@ -182,11 +184,23 @@ export default function SalesReportPage() {
   const handleApply = () => {
     setFilterError(null);
     const hasFrom = fromDate.length === 10;
-    const hasTo   = toDate.length === 10;
-    if (fromDate && !hasFrom) { setFilterError("Enter a complete From Date (MM/DD/YYYY)."); return; }
-    if (toDate   && !hasTo)   { setFilterError("Enter a complete To Date (MM/DD/YYYY)."); return; }
-    if (fromDate && !toDate)  { setFilterError("To Date is required when From Date is set."); return; }
-    if (toDate   && !fromDate){ setFilterError("From Date is required when To Date is set."); return; }
+    const hasTo = toDate.length === 10;
+    if (fromDate && !hasFrom) {
+      setFilterError("Enter a complete From Date (MM/DD/YYYY).");
+      return;
+    }
+    if (toDate && !hasTo) {
+      setFilterError("Enter a complete To Date (MM/DD/YYYY).");
+      return;
+    }
+    if (fromDate && !toDate) {
+      setFilterError("To Date is required when From Date is set.");
+      return;
+    }
+    if (toDate && !fromDate) {
+      setFilterError("From Date is required when To Date is set.");
+      return;
+    }
     setPage(1);
     fetchData({ LocationId: locationId, FromDate: fromDate, ToDate: toDate });
   };
@@ -237,21 +251,47 @@ export default function SalesReportPage() {
 
   const handleExport = () => {
     const headers = [
-      "Location", "Register", "Transaction #", "Date", "Tran Type", "Item Code",
-      "Sale Amount", "Units Sold", "Tax", "Total Per Line",
-      "Tender", "Final Amount", "Auth Approval", "Last Four",
+      "Location",
+      "Register",
+      "Transaction #",
+      "Date",
+      "Tran Type",
+      "Item Code",
+      "Sale Amount",
+      "Units Sold",
+      "Tax",
+      "Total Per Line",
+      "Tender",
+      "Final Amount",
+      "Auth Approval",
+      "Last Four",
     ];
     const escape = (v: string) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const rows = filtered.map((r) => [
-      r.LocationId, r.RegisterNumber, r.TransactionNumber, r.BusinessDate,
-      r.TranType, r.ItemCode, r["SALE AMOUNT"], r["UNITS SOLD"], r.TAX,
-      r["TOTAL PER LINE"], r.TENDER, r["FINAL AMOUNT"], r["AUTH APPROVAL"], r["LAST FOUR"],
-    ].map(escape).join(","));
+    const rows = filtered.map((r) =>
+      [
+        r.LocationId,
+        r.RegisterNumber,
+        r.TransactionNumber,
+        r.BusinessDate,
+        r.TranType,
+        r.ItemCode,
+        r["SALE AMOUNT"],
+        r["UNITS SOLD"],
+        r.TAX,
+        r["TOTAL PER LINE"],
+        r.TENDER,
+        r["FINAL AMOUNT"],
+        r["AUTH APPROVAL"],
+        r["LAST FOUR"],
+      ]
+        .map(escape)
+        .join(","),
+    );
     const csv = [headers.map(escape).join(","), ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href     = url;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
     a.download = `sales-report-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
@@ -357,7 +397,9 @@ export default function SalesReportPage() {
 
           {/* From Date */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-slate-600">From Date</label>
+            <label className="text-xs font-medium text-slate-600">
+              From Date
+            </label>
             <div className="relative">
               <input
                 type="text"
@@ -366,7 +408,7 @@ export default function SalesReportPage() {
                 onClick={() => fromRef.current?.showPicker()}
                 placeholder="MM/DD/YYYY"
                 maxLength={10}
-                className={`h-9 w-36 rounded-lg border bg-slate-50 pl-3 pr-8 text-sm text-slate-700 placeholder-slate-400 outline-none focus:ring-2 transition ${filterError && (fromDate && fromDate.length < 10 || !fromDate && toDate) ? "border-[#E60D2E] focus:border-[#E60D2E] focus:ring-[#E60D2E]/20" : "border-slate-200 focus:border-[#E60D2E] focus:ring-[#E60D2E]/20"}`}
+                className={`h-9 w-36 rounded-lg border bg-slate-50 pl-3 pr-8 text-sm text-slate-700 placeholder-slate-400 outline-none focus:ring-2 transition ${filterError && ((fromDate && fromDate.length < 10) || (!fromDate && toDate)) ? "border-[#E60D2E] focus:border-[#E60D2E] focus:ring-[#E60D2E]/20" : "border-slate-200 focus:border-[#E60D2E] focus:ring-[#E60D2E]/20"}`}
               />
               <button
                 type="button"
@@ -389,7 +431,9 @@ export default function SalesReportPage() {
 
           {/* To Date */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-slate-600">To Date</label>
+            <label className="text-xs font-medium text-slate-600">
+              To Date
+            </label>
             <div className="relative">
               <input
                 type="text"
@@ -398,7 +442,7 @@ export default function SalesReportPage() {
                 onClick={() => toRef.current?.showPicker()}
                 placeholder="MM/DD/YYYY"
                 maxLength={10}
-                className={`h-9 w-36 rounded-lg border bg-slate-50 pl-3 pr-8 text-sm text-slate-700 placeholder-slate-400 outline-none focus:ring-2 transition ${filterError && (toDate && toDate.length < 10 || !toDate && fromDate) ? "border-[#E60D2E] focus:border-[#E60D2E] focus:ring-[#E60D2E]/20" : "border-slate-200 focus:border-[#E60D2E] focus:ring-[#E60D2E]/20"}`}
+                className={`h-9 w-36 rounded-lg border bg-slate-50 pl-3 pr-8 text-sm text-slate-700 placeholder-slate-400 outline-none focus:ring-2 transition ${filterError && ((toDate && toDate.length < 10) || (!toDate && fromDate)) ? "border-[#E60D2E] focus:border-[#E60D2E] focus:ring-[#E60D2E]/20" : "border-slate-200 focus:border-[#E60D2E] focus:ring-[#E60D2E]/20"}`}
               />
               <button
                 type="button"
@@ -442,7 +486,9 @@ export default function SalesReportPage() {
           </div>
         </div>
         {filterError && (
-          <p className="mt-3 text-xs font-medium text-[#E60D2E]">{filterError}</p>
+          <p className="mt-3 text-xs font-medium text-[#E60D2E]">
+            {filterError}
+          </p>
         )}
       </div>
 
@@ -649,7 +695,9 @@ export default function SalesReportPage() {
                           >
                             {row["UNITS SOLD"]}
                           </td>
-                          <td className={`px-4 py-3 text-right ${n(row.TAX) < 0 ? "text-rose-600" : "text-slate-600"}`}>
+                          <td
+                            className={`px-4 py-3 text-right ${n(row.TAX) < 0 ? "text-rose-600" : "text-slate-600"}`}
+                          >
                             {fmt(n(row.TAX))}
                           </td>
                           <td

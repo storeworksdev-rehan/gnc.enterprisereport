@@ -25,7 +25,7 @@ export default function Home() {
         password: password,
       });
 
-      const { token, UserId, Username, RoleId, RoleName } =
+      const { token, UserId, Username, RoleId, RoleName, RegionIds } =
         response?.data ?? {};
       if (token) {
         localStorage.setItem("enterprise_auth_token", token);
@@ -33,7 +33,7 @@ export default function Home() {
       if (UserId !== undefined) {
         localStorage.setItem(
           "enterprise_user",
-          JSON.stringify({ UserId, Username, RoleId, RoleName }),
+          JSON.stringify({ UserId, Username, RoleId, RoleName, RegionIds }),
         );
       }
 

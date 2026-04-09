@@ -7,9 +7,8 @@ import {
   LayoutDashboard,
   BarChart3,
   Tag,
-  Store,
-  Users,
   Settings,
+  Users,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -17,6 +16,7 @@ import {
   ShieldCheck,
   Shield,
   KeyRound,
+  MapPin,
 } from "lucide-react";
 
 const topItems = [
@@ -28,7 +28,15 @@ const topItems = [
 const authItems = [
   { label: "Roles", href: "/dashboard/authentication/roles", icon: Shield },
   { label: "Users", href: "/dashboard/authentication/users", icon: Users },
-  { label: "Change Password", href: "/dashboard/authentication/change-password", icon: KeyRound },
+  {
+    label: "Change Password",
+    href: "/dashboard/authentication/change-password",
+    icon: KeyRound,
+  },
+];
+
+const settingsItems = [
+  { label: "Regions", href: "/dashboard/settings/regions", icon: MapPin },
 ];
 
 interface SidebarProps {
@@ -40,6 +48,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
   const [authOpen, setAuthOpen] = useState(
     authItems.some((i) => pathname.startsWith(i.href)),
+  );
+  const [settingsOpen, setSettingsOpen] = useState(
+    settingsItems.some((i) => pathname.startsWith(i.href)),
   );
 
   const linkClass = (href: string) =>
@@ -124,6 +135,62 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               {authOpen && (
                 <ul className="mt-0.5 space-y-0.5 pl-4">
                   {authItems.map(({ label, href, icon: Icon }) => (
+                    <li key={href}>
+                      <Link
+                        href={href}
+                        className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                          pathname.startsWith(href)
+                            ? "bg-[#E60D2E] text-white font-semibold"
+                            : "text-slate-400 hover:bg-white/10 hover:text-white"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4 shrink-0" />
+                        <span className="truncate">{label}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Settings group */}
+        <div className="mt-4">
+          {!collapsed && (
+            <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-600">
+              Settings
+            </p>
+          )}
+
+          {collapsed ? (
+            <ul className="space-y-1">
+              {settingsItems.map(({ label, href, icon: Icon }) => (
+                <li key={href}>
+                  <Link href={href} title={label} className={linkClass(href)}>
+                    <Icon className="h-4 w-4 shrink-0" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <>
+              <button
+                onClick={() => setSettingsOpen((v) => !v)}
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+              >
+                <Settings className="h-4 w-4 shrink-0" />
+                <span className="flex-1 truncate text-left">Settings</span>
+                <ChevronDown
+                  className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${
+                    settingsOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              {settingsOpen && (
+                <ul className="mt-0.5 space-y-0.5 pl-4">
+                  {settingsItems.map(({ label, href, icon: Icon }) => (
                     <li key={href}>
                       <Link
                         href={href}

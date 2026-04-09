@@ -110,10 +110,12 @@ export default function DealReportPage() {
   const [page, setPage] = useState(1);
 
   useEffect(() => {
+    const enterpriseUser = JSON.parse(
+      localStorage.getItem("enterprise_user") ?? "{}",
+    );
     axios
-      .post<{ Id: number; Name: string }[]>(
-        `${API_BASE}/ITDashboard/GetStores`,
-        { DivisionId: 0 },
+      .get<{ Id: number; Name: string }[]>(
+        `${API_BASE}/api/ITCentralServer/get-user-stores?regionIds=${enterpriseUser?.RegionIds ?? ""}`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("enterprise_auth_token") ?? ""}`,
@@ -127,7 +129,9 @@ export default function DealReportPage() {
         }[];
         setKnownLocations(stores.filter((s) => s.Id !== -1));
       })
-      .catch(() => {});
+      .catch(() => {
+        /* silently ignore — dropdown just stays empty */
+      });
   }, []);
 
   const fetchData = (params: {
@@ -267,7 +271,8 @@ export default function DealReportPage() {
       "Event #",
       "Deal #",
     ];
-    const escape = (v: string | null) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const escape = (v: string | null) =>
+      `"${String(v ?? "").replace(/"/g, '""')}"`;
     const rows = filtered.map((r) =>
       [
         r.LocationId,
@@ -545,10 +550,12 @@ export default function DealReportPage() {
         {/* Tab bar */}
         <div className="flex items-center justify-between border-b border-slate-100 px-5">
           <div className="flex">
-            {([
-              { id: "table",     label: "Data Table", icon: TableIcon },
-              { id: "analytics", label: "Analytics",  icon: BarChart2 },
-            ] as { id: Tab; label: string; icon: React.ElementType }[]).map(({ id, label, icon: Icon }) => (
+            {(
+              [
+                { id: "table", label: "Data Table", icon: TableIcon },
+                { id: "analytics", label: "Analytics", icon: BarChart2 },
+              ] as { id: Tab; label: string; icon: React.ElementType }[]
+            ).map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => setTab(id)}
@@ -569,12 +576,19 @@ export default function DealReportPage() {
               <Filter className="h-4 w-4 text-slate-400" />
               <select
                 value={dealTypeFilter}
-                onChange={(e) => { setDealTypeFilter(e.target.value); setPage(1); }}
+                onChange={(e) => {
+                  setDealTypeFilter(e.target.value);
+                  setPage(1);
+                }}
                 disabled={loading}
                 className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-700 outline-none focus:border-[#E60D2E] focus:ring-2 focus:ring-[#E60D2E]/20 disabled:opacity-50"
               >
                 <option value="All">All Deal Types</option>
-                {dealTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                {dealTypes.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
               </select>
               <button
                 onClick={handleExport}
@@ -599,184 +613,187 @@ export default function DealReportPage() {
         {tab === "table" && (
           <>
             <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50 text-left">
-                {[
-                  "Location",
-                  "Register",
-                  "Transaction #",
-                  "Date",
-                  "Item Code",
-                  "Sale Amount",
-                  "Discount",
-                  "Deal Type",
-                  "Qty",
-                  "Coupon",
-                  "Smart Coupon",
-                  "Ref ID",
-                  "Deal Name",
-                  "Event #",
-                  "Deal #",
-                ].map((h) => (
-                  <th
-                    key={h}
-                    className="whitespace-nowrap px-4 py-3 text-xs font-medium text-slate-500"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading ? (
-                Array.from({ length: PAGE_SIZE }).map((_, i) => (
-                  <SkeletonRow key={i} />
-                ))
-              ) : paginated.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={COL_COUNT}
-                    className="px-4 py-12 text-center text-sm text-slate-400"
-                  >
-                    {error
-                      ? "Could not load data."
-                      : "No records match your filters."}
-                  </td>
-                </tr>
-              ) : (
-                paginated.map((row, i) => {
-                  const saleAmt = n(row["SALE AMOUNT"]);
-                  const disc = n(row.DiscountAmount);
-                  return (
-                    <tr key={i} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-4 py-3 text-slate-700">
-                        {row.LocationId}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {row.RegisterNumber}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-600">
-                        {row.TransactionNumber}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {row.BusinessDate}
-                      </td>
-                      <td className="px-4 py-3 font-medium text-slate-700">
-                        {row.ItemCode}
-                      </td>
-                      <td
-                        className={`px-4 py-3 text-right font-medium ${saleAmt < 0 ? "text-rose-600" : "text-slate-900"}`}
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50 text-left">
+                    {[
+                      "Location",
+                      "Register",
+                      "Transaction #",
+                      "Date",
+                      "Item Code",
+                      "Sale Amount",
+                      "Discount",
+                      "Deal Type",
+                      "Qty",
+                      "Coupon",
+                      "Smart Coupon",
+                      "Ref ID",
+                      "Deal Name",
+                      "Event #",
+                      "Deal #",
+                    ].map((h) => (
+                      <th
+                        key={h}
+                        className="whitespace-nowrap px-4 py-3 text-xs font-medium text-slate-500"
                       >
-                        {fmt(saleAmt)}
-                      </td>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {loading ? (
+                    Array.from({ length: PAGE_SIZE }).map((_, i) => (
+                      <SkeletonRow key={i} />
+                    ))
+                  ) : paginated.length === 0 ? (
+                    <tr>
                       <td
-                        className={`px-4 py-3 text-right font-medium ${disc < 0 ? "text-rose-600" : "text-emerald-600"}`}
+                        colSpan={COL_COUNT}
+                        className="px-4 py-12 text-center text-sm text-slate-400"
                       >
-                        {fmt(disc)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${DEAL_TYPE_COLORS[row.DealType] ?? "bg-slate-100 text-slate-600"}`}
-                        >
-                          {row.DealType || "—"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right text-slate-700">
-                        {row.Quantity}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
-                        {row.Coupon || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
-                        {row.SmartCoupon || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
-                        {row.ReferenceIdentifier || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {row.DealName?.trim() || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
-                        {row.EventNumber}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
-                        {row.DealNumber}
+                        {error
+                          ? "Could not load data."
+                          : "No records match your filters."}
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                  ) : (
+                    paginated.map((row, i) => {
+                      const saleAmt = n(row["SALE AMOUNT"]);
+                      const disc = n(row.DiscountAmount);
+                      return (
+                        <tr
+                          key={i}
+                          className="hover:bg-slate-50 transition-colors"
+                        >
+                          <td className="px-4 py-3 text-slate-700">
+                            {row.LocationId}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {row.RegisterNumber}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-600">
+                            {row.TransactionNumber}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                            {row.BusinessDate}
+                          </td>
+                          <td className="px-4 py-3 font-medium text-slate-700">
+                            {row.ItemCode}
+                          </td>
+                          <td
+                            className={`px-4 py-3 text-right font-medium ${saleAmt < 0 ? "text-rose-600" : "text-slate-900"}`}
+                          >
+                            {fmt(saleAmt)}
+                          </td>
+                          <td
+                            className={`px-4 py-3 text-right font-medium ${disc < 0 ? "text-rose-600" : "text-emerald-600"}`}
+                          >
+                            {fmt(disc)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${DEAL_TYPE_COLORS[row.DealType] ?? "bg-slate-100 text-slate-600"}`}
+                            >
+                              {row.DealType || "—"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-700">
+                            {row.Quantity}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-500">
+                            {row.Coupon || "—"}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-500">
+                            {row.SmartCoupon || "—"}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-500">
+                            {row.ReferenceIdentifier || "—"}
+                          </td>
+                          <td className="px-4 py-3 text-slate-700">
+                            {row.DealName?.trim() || "—"}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-500">
+                            {row.EventNumber}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-500">
+                            {row.DealNumber}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-        {/* Pagination */}
-        <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3">
-          <p className="text-xs text-slate-500">
-            {loading
-              ? "Loading…"
-              : filtered.length === 0
-                ? "0 records"
-                : `${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} records`}
-          </p>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1 || loading}
-              className="h-7 w-7 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
-            >
-              ‹
-            </button>
-            {(() => {
-              const delta = 2;
-              const rangeSet = new Set<number>();
-              [
-                1,
-                totalPages,
-                ...Array.from(
-                  { length: delta * 2 + 1 },
-                  (_, i) => page - delta + i,
-                ),
-              ]
-                .filter((p) => p >= 1 && p <= totalPages)
-                .forEach((p) => rangeSet.add(p));
-              const range: (number | "…")[] = [];
-              [...rangeSet]
-                .sort((a, b) => a - b)
-                .forEach((p, idx, arr) => {
-                  if (idx > 0 && p - arr[idx - 1] > 1) range.push("…");
-                  range.push(p);
-                });
-              return range.map((item, idx) =>
-                item === "…" ? (
-                  <span
-                    key={`e-${idx}`}
-                    className="px-1 text-xs text-slate-400"
-                  >
-                    …
-                  </span>
-                ) : (
-                  <button
-                    key={item}
-                    onClick={() => setPage(item)}
-                    disabled={loading}
-                    className={`h-7 min-w-7 rounded-md border px-1 text-xs transition-colors ${item === page ? "border-[#E60D2E] bg-[#E60D2E] text-white font-semibold" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}
-                  >
-                    {item}
-                  </button>
-                ),
-              );
-            })()}
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages || loading}
-              className="h-7 w-7 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
-            >
-              ›
-            </button>
-          </div>
-        </div>
+            {/* Pagination */}
+            <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3">
+              <p className="text-xs text-slate-500">
+                {loading
+                  ? "Loading…"
+                  : filtered.length === 0
+                    ? "0 records"
+                    : `${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} records`}
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1 || loading}
+                  className="h-7 w-7 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+                >
+                  ‹
+                </button>
+                {(() => {
+                  const delta = 2;
+                  const rangeSet = new Set<number>();
+                  [
+                    1,
+                    totalPages,
+                    ...Array.from(
+                      { length: delta * 2 + 1 },
+                      (_, i) => page - delta + i,
+                    ),
+                  ]
+                    .filter((p) => p >= 1 && p <= totalPages)
+                    .forEach((p) => rangeSet.add(p));
+                  const range: (number | "…")[] = [];
+                  [...rangeSet]
+                    .sort((a, b) => a - b)
+                    .forEach((p, idx, arr) => {
+                      if (idx > 0 && p - arr[idx - 1] > 1) range.push("…");
+                      range.push(p);
+                    });
+                  return range.map((item, idx) =>
+                    item === "…" ? (
+                      <span
+                        key={`e-${idx}`}
+                        className="px-1 text-xs text-slate-400"
+                      >
+                        …
+                      </span>
+                    ) : (
+                      <button
+                        key={item}
+                        onClick={() => setPage(item)}
+                        disabled={loading}
+                        className={`h-7 min-w-7 rounded-md border px-1 text-xs transition-colors ${item === page ? "border-[#E60D2E] bg-[#E60D2E] text-white font-semibold" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+                      >
+                        {item}
+                      </button>
+                    ),
+                  );
+                })()}
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages || loading}
+                  className="h-7 w-7 rounded-md border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+                >
+                  ›
+                </button>
+              </div>
+            </div>
           </>
         )}
 
@@ -784,15 +801,18 @@ export default function DealReportPage() {
         {tab === "analytics" && (
           <div className="p-0">
             {loading ? (
-              <div className="flex items-center justify-center py-24 text-sm text-slate-400">Loading data…</div>
+              <div className="flex items-center justify-center py-24 text-sm text-slate-400">
+                Loading data…
+              </div>
             ) : data.length === 0 ? (
-              <div className="flex items-center justify-center py-24 text-sm text-slate-400">No data available.</div>
+              <div className="flex items-center justify-center py-24 text-sm text-slate-400">
+                No data available.
+              </div>
             ) : (
               <DealAnalytics data={data} />
             )}
           </div>
         )}
-
       </div>
     </div>
   );

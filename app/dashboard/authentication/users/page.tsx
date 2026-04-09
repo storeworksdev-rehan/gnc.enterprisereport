@@ -16,6 +16,8 @@ import {
   Eye,
   EyeOff,
   ShieldCheck,
+  MapPin,
+  ChevronDown,
 } from "lucide-react";
 import { API_BASE_API as API_BASE } from "@/lib/config";
 
@@ -23,6 +25,11 @@ import { API_BASE_API as API_BASE } from "@/lib/config";
 interface Role {
   RoleId: number;
   RoleName: string;
+}
+
+interface Region {
+  Id: number;
+  Name: string;
 }
 
 interface User {
@@ -34,6 +41,7 @@ interface User {
   SessionToken: string;
   PagePermissions: string;
   Features: string;
+  RegionIds: string;
 }
 
 type FormUser = Omit<User, "UserId"> & { UserId?: number };
@@ -47,12 +55,15 @@ const emptyForm = (): FormUser => ({
   SessionToken: "",
   PagePermissions: "",
   Features: "",
+  RegionIds: "",
 });
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [regionsDropdownOpen, setRegionsDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
@@ -75,12 +86,14 @@ export default function UsersPage() {
     setLoading(true);
     setError(null);
     try {
-      const [usersRes, rolesRes] = await Promise.all([
+      const [usersRes, rolesRes, regionsRes] = await Promise.all([
         axios.get<User[]>(`${API_BASE}/api/auth/get-users`),
         axios.get<Role[]>(`${API_BASE}/api/auth/get-roles`),
+        axios.get<Region[]>(`${API_BASE}/api/ITCentralServer/get-regions`),
       ]);
       setUsers(usersRes.data);
       setRoles(rolesRes.data);
+      setRegions(regionsRes.data);
     } catch {
       setError("Failed to load data.");
     } finally {
@@ -120,6 +133,7 @@ export default function UsersPage() {
     setForm(emptyForm());
     setPanel(null);
     setError(null);
+    setRegionsDropdownOpen(false);
   }
 
   function handleRoleChange(roleId: number) {
@@ -435,6 +449,73 @@ export default function UsersPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              {/* Regions */}
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Regions
+                </label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setRegionsDropdownOpen((v) => !v)}
+                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 outline-none focus:border-[#e31837] focus:ring-2 focus:ring-[#e31837]/10 transition"
+                  >
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <MapPin className="h-4 w-4 shrink-0 text-slate-400" />
+                      <span className="truncate text-slate-700">
+                        {form.RegionIds
+                          ? regions
+                              .filter((r) =>
+                                form.RegionIds.split(",").map(Number).includes(r.Id),
+                              )
+                              .map((r) => r.Name)
+                              .join(", ") || "Select regions…"
+                          : "Select regions…"}
+                      </span>
+                    </div>
+                    <ChevronDown
+                      className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${regionsDropdownOpen ? "rotate-180" : ""}`}
+                    />
+                  </button>
+
+                  {regionsDropdownOpen && (
+                    <div className="absolute z-50 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg">
+                      <ul className="max-h-48 overflow-y-auto py-1">
+                        {regions.map((r) => {
+                          const selected = form.RegionIds
+                            ? form.RegionIds.split(",").map(Number).includes(r.Id)
+                            : false;
+                          return (
+                            <li key={r.Id}>
+                              <label className="flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                                <input
+                                  type="checkbox"
+                                  checked={selected}
+                                  onChange={() => {
+                                    const current = form.RegionIds
+                                      ? form.RegionIds.split(",").map(Number).filter(Boolean)
+                                      : [];
+                                    const next = selected
+                                      ? current.filter((id) => id !== r.Id)
+                                      : [...current, r.Id];
+                                    setForm((f) => ({
+                                      ...f,
+                                      RegionIds: next.join(","),
+                                    }));
+                                  }}
+                                  className="h-3.5 w-3.5 rounded border-slate-300 accent-[#e31837]"
+                                />
+                                {r.Name}
+                              </label>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

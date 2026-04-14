@@ -11,10 +11,12 @@ import {
   Hash,
   RefreshCw,
   ChevronDown,
+  ChevronRight,
   X,
   CalendarDays,
   TableIcon,
   BarChart2,
+  Layers,
 } from "lucide-react";
 import DealAnalytics from "@/components/DealAnalytics";
 import { API_BASE } from "@/lib/config";
@@ -54,10 +56,10 @@ const fmt = (v: number) =>
 
 const COL_COUNT = 15;
 
-function SkeletonRow() {
+function SkeletonRow({ cols }: { cols: number }) {
   return (
     <tr>
-      {Array.from({ length: COL_COUNT }).map((_, i) => (
+      {Array.from({ length: cols }).map((_, i) => (
         <td key={i} className="px-4 py-3">
           <div className="h-3 w-full animate-pulse rounded bg-slate-200" />
         </td>
@@ -79,21 +81,28 @@ function SkeletonKpi() {
 }
 
 const PAGE_SIZE = 15;
-type Tab = "table" | "analytics";
+type Tab = "hierarchy" | "flat" | "analytics";
+
+const FLAT_HEADERS = [
+  "Location", "Register", "Transaction #", "Date", "Item Code",
+  "Regular Amount", "Discount", "Deal Type", "Qty", "Coupon",
+  "Smart Coupon", "Ref ID", "Deal Name", "Event #", "Deal #",
+];
 
 export default function DealReportPage() {
   const [data, setData] = useState<ApiRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterError, setFilterError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("table");
+  const [tab, setTab] = useState<Tab>("flat");
 
   // ── API-level filters ────────────────────────────────────────────
-  const [locationId, setLocationId] = useState("");
+  const [locationIds, setLocationIds] = useState<string[]>([]);
+  const [transactionNumber, setTransactionNumber] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
-  // ── Searchable location select ───────────────────────────────────
+  // ── Searchable location multi-select ────────────────────────────
   const [locSearch, setLocSearch] = useState("");
   const [locOpen, setLocOpen] = useState(false);
   const locRef = useRef<HTMLDivElement>(null);
@@ -108,6 +117,9 @@ export default function DealReportPage() {
   // ── Client-side filters ──────────────────────────────────────────
   const [dealTypeFilter, setDealTypeFilter] = useState("All");
   const [page, setPage] = useState(1);
+
+  // ── Hierarchy expansion state ────────────────────────────────────
+  const [expandedLocations, setExpandedLocations] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const enterpriseUser = JSON.parse(
@@ -129,15 +141,20 @@ export default function DealReportPage() {
         }[];
         setKnownLocations(stores.filter((s) => s.Id !== -1));
       })
-      .catch(() => {
-        /* silently ignore — dropdown just stays empty */
-      });
+      .catch(() => {/* silently ignore */});
   }, []);
 
+  // Auto-expand all locations when data changes
+  useEffect(() => {
+    const locs = new Set(data.map((r) => r.LocationId));
+    setExpandedLocations(locs);
+  }, [data]);
+
   const fetchData = (params: {
-    LocationId?: string;
+    LocationIds?: string;
     FromDate?: string;
     ToDate?: string;
+    TransactionNumber?: string;
   }) => {
     setLoading(true);
     setError(null);
@@ -147,9 +164,10 @@ export default function DealReportPage() {
           Authorization: `Bearer ${localStorage.getItem("enterprise_auth_token") ?? ""}`,
         },
         params: {
-          ...(params.LocationId ? { LocationId: params.LocationId } : {}),
+          ...(params.LocationIds ? { LocationIds: params.LocationIds } : {}),
           ...(params.FromDate ? { FromDate: params.FromDate } : {}),
           ...(params.ToDate ? { ToDate: params.ToDate } : {}),
+          ...(params.TransactionNumber ? { TransactionNumber: params.TransactionNumber } : {}),
         },
       })
       .then((res) => setData(Array.isArray(res.data) ? res.data : []))
@@ -179,10 +197,21 @@ export default function DealReportPage() {
   const filteredLocations = useMemo(
     () =>
       knownLocations.filter((l) =>
-        l.Name.toLowerCase().includes(locSearch.toLowerCase()),
+        (l.Id.toString() + "-" + l.Name)
+          .toLowerCase()
+          .includes(locSearch.toLowerCase()),
       ),
     [knownLocations, locSearch],
   );
+
+  const toggleLocation = (locId: string) => {
+    setExpandedLocations((prev) => {
+      const next = new Set(prev);
+      if (next.has(locId)) next.delete(locId);
+      else next.add(locId);
+      return next;
+    });
+  };
 
   const maskDate = (raw: string) => {
     const digits = raw.replace(/\D/g, "").slice(0, 8);
@@ -193,6 +222,10 @@ export default function DealReportPage() {
 
   const handleApply = () => {
     setFilterError(null);
+    if (transactionNumber && locationIds.length === 0) {
+      setFilterError("Select at least one Location ID when filtering by Transaction #.");
+      return;
+    }
     const hasFrom = fromDate.length === 10;
     const hasTo = toDate.length === 10;
     if (fromDate && !hasFrom) {
@@ -212,11 +245,17 @@ export default function DealReportPage() {
       return;
     }
     setPage(1);
-    fetchData({ LocationId: locationId, FromDate: fromDate, ToDate: toDate });
+    fetchData({
+      LocationIds: locationIds.length > 0 ? locationIds.join(",") : undefined,
+      FromDate: fromDate || undefined,
+      ToDate: toDate || undefined,
+      TransactionNumber: transactionNumber || undefined,
+    });
   };
 
   const handleClear = () => {
-    setLocationId("");
+    setLocationIds([]);
+    setTransactionNumber("");
     setFromDate("");
     setToDate("");
     setLocSearch("");
@@ -251,45 +290,32 @@ export default function DealReportPage() {
     [data],
   );
 
-  const hasFilters = locationId || fromDate || toDate;
+  // ── Hierarchy grouping ───────────────────────────────────────────
+  const hierarchyGroups = useMemo(() => {
+    const groups: Record<string, ApiRow[]> = {};
+    filtered.forEach((row) => {
+      if (!groups[row.LocationId]) groups[row.LocationId] = [];
+      groups[row.LocationId].push(row);
+    });
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [filtered]);
+
+  const hasFilters = locationIds.length > 0 || transactionNumber || fromDate || toDate;
 
   const handleExport = () => {
     const headers = [
-      "Location",
-      "Register",
-      "Transaction #",
-      "Date",
-      "Item Code",
-      "Sale Amount",
-      "Discount Amount",
-      "Deal Type",
-      "Quantity",
-      "Coupon",
-      "Smart Coupon",
-      "Reference ID",
-      "Deal Name",
-      "Event #",
-      "Deal #",
+      "Location", "Register", "Transaction #", "Date", "Item Code",
+      "Regular Amount", "Discount Amount", "Deal Type", "Quantity", "Coupon",
+      "Smart Coupon", "Reference ID", "Deal Name", "Event #", "Deal #",
     ];
     const escape = (v: string | null) =>
       `"${String(v ?? "").replace(/"/g, '""')}"`;
     const rows = filtered.map((r) =>
       [
-        r.LocationId,
-        r.RegisterNumber,
-        r.TransactionNumber,
-        r.BusinessDate,
-        r.ItemCode,
-        r["SALE AMOUNT"],
-        String(r.DiscountAmount),
-        r.DealType,
-        String(r.Quantity),
-        r.Coupon,
-        r.SmartCoupon,
-        r.ReferenceIdentifier,
-        (r.DealName ?? "").trim(),
-        r.EventNumber,
-        r.DealNumber,
+        r.LocationId, r.RegisterNumber, r.TransactionNumber, r.BusinessDate,
+        r.ItemCode, r["SALE AMOUNT"], String(r.DiscountAmount), r.DealType,
+        String(r.Quantity), r.Coupon, r.SmartCoupon, r.ReferenceIdentifier,
+        (r.DealName ?? "").trim(), r.EventNumber, r.DealNumber,
       ]
         .map(escape)
         .join(","),
@@ -304,13 +330,22 @@ export default function DealReportPage() {
     URL.revokeObjectURL(url);
   };
 
+  // ── Location trigger label ───────────────────────────────────────
+  const locTriggerLabel =
+    locationIds.length === 0
+      ? "All Locations"
+      : locationIds.length === 1
+        ? (knownLocations.find((l) => String(l.Id) === locationIds[0])?.Name ??
+            locationIds[0])
+        : `${locationIds.length} Locations selected`;
+
   return (
     <div className="space-y-5">
       {/* ── TOP FILTER BAR ── */}
       <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
         <div className="flex flex-wrap items-end gap-4">
-          {/* Location searchable select */}
-          <div className="flex flex-col gap-1.5 min-w-50">
+          {/* Location multi-select */}
+          <div className="flex flex-col gap-1.5 min-w-[200px]">
             <label className="text-xs font-medium text-slate-600">
               Location ID
             </label>
@@ -320,21 +355,16 @@ export default function DealReportPage() {
                 onClick={() => setLocOpen((v) => !v)}
                 className="flex h-9 w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#E60D2E] focus:ring-2 focus:ring-[#E60D2E]/20 transition"
               >
-                <span
-                  className={locationId ? "text-slate-900" : "text-slate-400"}
-                >
-                  {locationId
-                    ? (knownLocations.find((l) => String(l.Id) === locationId)
-                        ?.Name ?? locationId)
-                    : "All Locations"}
+                <span className={locationIds.length > 0 ? "text-slate-900" : "text-slate-400"}>
+                  {locTriggerLabel}
                 </span>
                 <div className="flex items-center gap-1">
-                  {locationId && (
+                  {locationIds.length > 0 && (
                     <X
                       className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setLocationId("");
+                        setLocationIds([]);
                         setLocSearch("");
                       }}
                     />
@@ -346,7 +376,7 @@ export default function DealReportPage() {
               </button>
 
               {locOpen && (
-                <div className="absolute z-50 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg">
+                <div className="absolute z-50 mt-1 w-full min-w-[220px] rounded-xl border border-slate-200 bg-white shadow-lg">
                   <div className="p-2 border-b border-slate-100">
                     <div className="relative">
                       <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
@@ -360,17 +390,22 @@ export default function DealReportPage() {
                       />
                     </div>
                   </div>
-                  <ul className="max-h-48 overflow-y-auto py-1">
+                  <ul className="max-h-52 overflow-y-auto py-1">
                     <li>
                       <button
                         type="button"
                         onClick={() => {
-                          setLocationId("");
+                          setLocationIds([]);
                           setLocSearch("");
-                          setLocOpen(false);
                         }}
-                        className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-50 transition-colors ${!locationId ? "font-semibold text-[#E60D2E]" : "text-slate-600"}`}
+                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-slate-50 transition-colors ${locationIds.length === 0 ? "font-semibold text-[#E60D2E]" : "text-slate-600"}`}
                       >
+                        <input
+                          type="checkbox"
+                          readOnly
+                          checked={locationIds.length === 0}
+                          className="h-3.5 w-3.5 accent-[#E60D2E] shrink-0"
+                        />
                         All Locations
                       </button>
                     </li>
@@ -379,24 +414,66 @@ export default function DealReportPage() {
                         No results
                       </li>
                     ) : (
-                      filteredLocations.map((loc) => (
-                        <li key={loc.Id}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setLocationId(String(loc.Id));
-                              setLocSearch("");
-                              setLocOpen(false);
-                            }}
-                            className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-50 transition-colors ${locationId === String(loc.Id) ? "font-semibold text-[#E60D2E]" : "text-slate-700"}`}
-                          >
-                            {loc.Name}
-                          </button>
-                        </li>
-                      ))
+                      filteredLocations.map((loc) => {
+                        const locIdStr = String(loc.Id);
+                        const checked = locationIds.includes(locIdStr);
+                        return (
+                          <li key={loc.Id}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setLocationIds((prev) =>
+                                  checked
+                                    ? prev.filter((id) => id !== locIdStr)
+                                    : [...prev, locIdStr],
+                                )
+                              }
+                              className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-slate-50 transition-colors ${checked ? "font-semibold text-[#E60D2E]" : "text-slate-700"}`}
+                            >
+                              <input
+                                type="checkbox"
+                                readOnly
+                                checked={checked}
+                                className="h-3.5 w-3.5 accent-[#E60D2E] shrink-0"
+                              />
+                              {loc.Id + "-" + loc.Name}
+                            </button>
+                          </li>
+                        );
+                      })
                     )}
                   </ul>
                 </div>
+              )}
+            </div>
+          </div>
+
+          {/* Transaction # */}
+          <div className="flex flex-col gap-1.5">
+            <label className={`text-xs font-medium ${locationIds.length === 0 ? "text-slate-400" : "text-slate-600"}`}>
+              Transaction #
+              {locationIds.length === 0 && (
+                <span className="ml-1 font-normal text-slate-400">(select a location first)</span>
+              )}
+            </label>
+            <div className="relative">
+              <Hash className={`absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 ${locationIds.length === 0 ? "text-slate-300" : "text-slate-400"}`} />
+              <input
+                type="text"
+                value={transactionNumber}
+                onChange={(e) => setTransactionNumber(e.target.value)}
+                placeholder="Transaction #"
+                disabled={locationIds.length === 0}
+                className="h-9 w-40 rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-8 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#E60D2E] focus:ring-2 focus:ring-[#E60D2E]/20 transition disabled:cursor-not-allowed disabled:opacity-40"
+              />
+              {transactionNumber && (
+                <button
+                  type="button"
+                  onClick={() => setTransactionNumber("")}
+                  className="absolute inset-y-0 right-2 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               )}
             </div>
           </div>
@@ -552,7 +629,8 @@ export default function DealReportPage() {
           <div className="flex">
             {(
               [
-                { id: "table", label: "Data Table", icon: TableIcon },
+                { id: "flat", label: "Flat Table", icon: TableIcon },
+                { id: "hierarchy", label: "Hierarchy View", icon: Layers },
                 { id: "analytics", label: "Analytics", icon: BarChart2 },
               ] as { id: Tab; label: string; icon: React.ElementType }[]
             ).map(({ id, label, icon: Icon }) => (
@@ -571,7 +649,7 @@ export default function DealReportPage() {
             ))}
           </div>
 
-          {tab === "table" && (
+          {tab === "flat" && (
             <div className="flex items-center gap-3 py-2">
               <Filter className="h-4 w-4 text-slate-400" />
               <select
@@ -600,39 +678,192 @@ export default function DealReportPage() {
               </button>
             </div>
           )}
+
+          {tab === "hierarchy" && !loading && filtered.length > 0 && (
+            <div className="flex items-center gap-2 py-2">
+              <button
+                onClick={() => setExpandedLocations(new Set(hierarchyGroups.map(([id]) => id)))}
+                className="text-xs text-slate-500 hover:text-[#E60D2E] transition-colors"
+              >
+                Expand all
+              </button>
+              <span className="text-slate-300">|</span>
+              <button
+                onClick={() => setExpandedLocations(new Set())}
+                className="text-xs text-slate-500 hover:text-[#E60D2E] transition-colors"
+              >
+                Collapse all
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Error banner */}
-        {error && tab === "table" && (
+        {error && (
           <div className="mx-5 mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
           </div>
         )}
 
-        {/* ── TABLE TAB ── */}
-        {tab === "table" && (
+        {/* ── HIERARCHY VIEW TAB ── */}
+        {tab === "hierarchy" && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50 text-left">
+                  <th className="w-8 px-3 py-3" />
+                  {FLAT_HEADERS.map((h) => (
+                    <th
+                      key={h}
+                      className="whitespace-nowrap px-4 py-3 text-xs font-medium text-slate-500"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <SkeletonRow key={i} cols={COL_COUNT + 1} />
+                  ))
+                ) : hierarchyGroups.length === 0 ? (
+                  <tr>
+                    <td colSpan={COL_COUNT + 1} className="px-4 py-12 text-center text-sm text-slate-400">
+                      {error ? "Could not load data." : "No records match your filters."}
+                    </td>
+                  </tr>
+                ) : (
+                  hierarchyGroups.map(([locId, rows]) => {
+                    const isExpanded = expandedLocations.has(locId);
+                    const locName = knownLocations.find((l) => String(l.Id) === locId)?.Name ?? "";
+                    const totalSale = rows.reduce((s, r) => s + n(r["SALE AMOUNT"]), 0);
+                    const totalDiscount = rows.reduce((s, r) => s + n(r.DiscountAmount), 0);
+                    const totalQty = rows.reduce((s, r) => s + n(r.Quantity), 0);
+                    const uniqueTxns = new Set(rows.map((r) => r.TransactionNumber)).size;
+
+                    return (
+                      <>
+                        {/* Summary row */}
+                        <tr
+                          key={`loc-${locId}`}
+                          className="cursor-pointer bg-slate-50/80 hover:bg-slate-100 transition-colors"
+                          onClick={() => toggleLocation(locId)}
+                        >
+                          <td className="px-3 py-3 text-slate-400">
+                            {isExpanded
+                              ? <ChevronDown className="h-4 w-4" />
+                              : <ChevronRight className="h-4 w-4" />}
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-slate-900 whitespace-nowrap">
+                            {locId}{locName ? ` – ${locName}` : ""}
+                          </td>
+                          <td className="px-4 py-3 text-slate-400 text-xs">—</td>
+                          <td className="px-4 py-3 text-xs text-slate-500 font-medium">
+                            {uniqueTxns} txns
+                          </td>
+                          <td className="px-4 py-3 text-slate-400 text-xs">—</td>
+                          <td className="px-4 py-3">
+                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                              {rows.length} items
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                            {fmt(totalSale)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-medium text-emerald-600">
+                            {fmt(totalDiscount)}
+                          </td>
+                          <td className="px-4 py-3 text-slate-400 text-xs">—</td>
+                          <td className="px-4 py-3 text-right font-medium text-slate-700">
+                            {totalQty}
+                          </td>
+                          <td className="px-4 py-3 text-slate-400 text-xs">—</td>
+                          <td className="px-4 py-3 text-slate-400 text-xs">—</td>
+                          <td className="px-4 py-3 text-slate-400 text-xs">—</td>
+                          <td className="px-4 py-3 text-slate-400 text-xs">—</td>
+                          <td className="px-4 py-3 text-slate-400 text-xs">—</td>
+                          <td className="px-4 py-3 text-slate-400 text-xs">—</td>
+                        </tr>
+
+                        {/* Detail rows */}
+                        {isExpanded &&
+                          rows.map((row, i) => {
+                            const saleAmt = n(row["SALE AMOUNT"]);
+                            const disc = n(row.DiscountAmount);
+                            return (
+                              <tr
+                                key={`${locId}-${i}`}
+                                className="hover:bg-slate-50 transition-colors border-l-2 border-l-slate-100"
+                              >
+                                <td className="px-3 py-2.5" />
+                                <td className="px-4 py-2.5 text-slate-500 text-xs pl-6">
+                                  └
+                                </td>
+                                <td className="px-4 py-2.5 text-slate-600">
+                                  {row.RegisterNumber}
+                                </td>
+                                <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-600">
+                                  {row.TransactionNumber}
+                                </td>
+                                <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
+                                  {row.BusinessDate}
+                                </td>
+                                <td className="px-4 py-2.5 font-medium text-slate-700">
+                                  {row.ItemCode}
+                                </td>
+                                <td className={`px-4 py-2.5 text-right font-medium ${saleAmt < 0 ? "text-rose-600" : "text-slate-900"}`}>
+                                  {fmt(saleAmt)}
+                                </td>
+                                <td className={`px-4 py-2.5 text-right font-medium ${disc < 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                                  {fmt(disc)}
+                                </td>
+                                <td className="px-4 py-2.5">
+                                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${DEAL_TYPE_COLORS[row.DealType] ?? "bg-slate-100 text-slate-600"}`}>
+                                    {row.DealType || "—"}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-2.5 text-right text-slate-700">
+                                  {row.Quantity}
+                                </td>
+                                <td className="px-4 py-2.5 text-xs text-slate-500">
+                                  {row.Coupon || "—"}
+                                </td>
+                                <td className="px-4 py-2.5 text-xs text-slate-500">
+                                  {row.SmartCoupon || "—"}
+                                </td>
+                                <td className="px-4 py-2.5 text-xs text-slate-500">
+                                  {row.ReferenceIdentifier || "—"}
+                                </td>
+                                <td className="px-4 py-2.5 text-slate-700">
+                                  {row.DealName?.trim() || "—"}
+                                </td>
+                                <td className="px-4 py-2.5 text-xs text-slate-500">
+                                  {row.EventNumber}
+                                </td>
+                                <td className="px-4 py-2.5 text-xs text-slate-500">
+                                  {row.DealNumber}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* ── FLAT TABLE TAB ── */}
+        {tab === "flat" && (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50 text-left">
-                    {[
-                      "Location",
-                      "Register",
-                      "Transaction #",
-                      "Date",
-                      "Item Code",
-                      "Sale Amount",
-                      "Discount",
-                      "Deal Type",
-                      "Qty",
-                      "Coupon",
-                      "Smart Coupon",
-                      "Ref ID",
-                      "Deal Name",
-                      "Event #",
-                      "Deal #",
-                    ].map((h) => (
+                    {FLAT_HEADERS.map((h) => (
                       <th
                         key={h}
                         className="whitespace-nowrap px-4 py-3 text-xs font-medium text-slate-500"
@@ -645,7 +876,7 @@ export default function DealReportPage() {
                 <tbody className="divide-y divide-slate-100">
                   {loading ? (
                     Array.from({ length: PAGE_SIZE }).map((_, i) => (
-                      <SkeletonRow key={i} />
+                      <SkeletonRow key={i} cols={COL_COUNT} />
                     ))
                   ) : paginated.length === 0 ? (
                     <tr>

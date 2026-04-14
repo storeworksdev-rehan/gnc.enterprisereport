@@ -40,7 +40,7 @@ export default function Home() {
       setStatus("success");
       setMessage("Login successful. Redirecting…");
       setTimeout(() => {
-        window.location.href = "/dashboard";
+        window.location.href = "/dashboard/sales-report";
       }, 800);
     } catch (error: unknown) {
       setStatus("error");

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
-  LayoutDashboard,
   BarChart3,
   Tag,
   Settings,
@@ -20,7 +19,6 @@ import {
 } from "lucide-react";
 
 const topItems = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Sales Report", href: "/dashboard/sales-report", icon: BarChart3 },
   { label: "Deal Report", href: "/dashboard/deal-report", icon: Tag },
 ];

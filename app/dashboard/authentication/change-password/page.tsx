@@ -68,7 +68,7 @@ export default function ChangePasswordPage() {
       await axios.post(`${API_BASE}/api/auth/change-password`, {
         UserId: user.UserId,
         CurrentPassword: form.CurrentPassword,
-        NewPassword: form.NewPassword,
+        Password: form.NewPassword,
       });
 
       setStatus("success");

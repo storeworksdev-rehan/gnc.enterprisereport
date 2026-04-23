@@ -184,7 +184,7 @@ export default function UsersPage() {
     try {
       await axios.post(`${API_BASE}/api/auth/change-password`, {
         UserId: selected.UserId,
-        Password: newPassword,
+        PasswordHash: newPassword,
       });
       handleCancel();
     } catch {
@@ -469,7 +469,9 @@ export default function UsersPage() {
                         {form.RegionIds
                           ? regions
                               .filter((r) =>
-                                form.RegionIds.split(",").map(Number).includes(r.Id),
+                                form.RegionIds.split(",")
+                                  .map(Number)
+                                  .includes(r.Id),
                               )
                               .map((r) => r.Name)
                               .join(", ") || "Select regions…"
@@ -486,7 +488,9 @@ export default function UsersPage() {
                       <ul className="max-h-48 overflow-y-auto py-1">
                         {regions.map((r) => {
                           const selected = form.RegionIds
-                            ? form.RegionIds.split(",").map(Number).includes(r.Id)
+                            ? form.RegionIds.split(",")
+                                .map(Number)
+                                .includes(r.Id)
                             : false;
                           return (
                             <li key={r.Id}>
@@ -496,7 +500,9 @@ export default function UsersPage() {
                                   checked={selected}
                                   onChange={() => {
                                     const current = form.RegionIds
-                                      ? form.RegionIds.split(",").map(Number).filter(Boolean)
+                                      ? form.RegionIds.split(",")
+                                          .map(Number)
+                                          .filter(Boolean)
                                       : [];
                                     const next = selected
                                       ? current.filter((id) => id !== r.Id)

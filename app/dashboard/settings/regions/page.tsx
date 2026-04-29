@@ -183,8 +183,11 @@ export default function RegionsPage() {
     });
   };
 
+  const allLeftSelected = available.length > 0 && available.every((l) => leftChecked.has(l.Id));
+  const allRightSelected = assigned.length > 0 && assigned.every((l) => rightChecked.has(l.Id));
+
   const toggleAllLeft = () => {
-    if (leftChecked.size === available.length) {
+    if (allLeftSelected) {
       setLeftChecked(new Set());
     } else {
       setLeftChecked(new Set(available.map((l) => l.Id)));
@@ -192,7 +195,7 @@ export default function RegionsPage() {
   };
 
   const toggleAllRight = () => {
-    if (rightChecked.size === assigned.length) {
+    if (allRightSelected) {
       setRightChecked(new Set());
     } else {
       setRightChecked(new Set(assigned.map((l) => l.Id)));
@@ -379,10 +382,7 @@ export default function RegionsPage() {
                         <label className="flex cursor-pointer items-center gap-2.5 border-b border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
                           <input
                             type="checkbox"
-                            checked={
-                              leftChecked.size === available.length &&
-                              available.length > 0
-                            }
+                            checked={allLeftSelected}
                             onChange={toggleAllLeft}
                             className="h-3.5 w-3.5 rounded border-slate-300 accent-[#E60D2E]"
                           />
@@ -451,10 +451,7 @@ export default function RegionsPage() {
                         <label className="flex cursor-pointer items-center gap-2.5 border-b border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
                           <input
                             type="checkbox"
-                            checked={
-                              rightChecked.size === assigned.length &&
-                              assigned.length > 0
-                            }
+                            checked={allRightSelected}
                             onChange={toggleAllRight}
                             className="h-3.5 w-3.5 rounded border-slate-300 accent-[#E60D2E]"
                           />

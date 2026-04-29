@@ -194,15 +194,14 @@ export default function DealReportPage() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const filteredLocations = useMemo(
-    () =>
-      knownLocations.filter((l) =>
-        (l.Id.toString() + "-" + l.Name)
-          .toLowerCase()
-          .includes(locSearch.toLowerCase()),
-      ),
-    [knownLocations, locSearch],
-  );
+  const filteredLocations = useMemo(() => {
+    const q = locSearch.trim();
+    if (!q) return knownLocations;
+    const ql = q.toLowerCase();
+    return knownLocations.filter((l) =>
+      l.Id.toString().includes(q) || l.Name.toLowerCase().includes(ql),
+    );
+  }, [knownLocations, locSearch]);
 
   const toggleLocation = (locId: string) => {
     setExpandedLocations((prev) => {
@@ -218,6 +217,14 @@ export default function DealReportPage() {
     if (digits.length <= 2) return digits;
     if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
     return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+  };
+
+  // Convert MM/DD/YYYY → YYYY-MM-DD for the hidden date input value.
+  // Returns "" when the text is incomplete so the picker opens with no pre-selection.
+  const toISODate = (mmddyyyy: string) => {
+    if (mmddyyyy.length !== 10) return "";
+    const [m, d, y] = mmddyyyy.split("/");
+    return `${y}-${m}-${d}`;
   };
 
   const handleApply = () => {
@@ -503,6 +510,7 @@ export default function DealReportPage() {
               <input
                 ref={fromRef}
                 type="date"
+                value={toISODate(fromDate)}
                 className="absolute inset-0 opacity-0 pointer-events-none"
                 onChange={(e) => {
                   const [y, m, d] = e.target.value.split("-");
@@ -537,6 +545,7 @@ export default function DealReportPage() {
               <input
                 ref={toRef}
                 type="date"
+                value={toISODate(toDate)}
                 className="absolute inset-0 opacity-0 pointer-events-none"
                 onChange={(e) => {
                   const [y, m, d] = e.target.value.split("-");
@@ -707,9 +716,9 @@ export default function DealReportPage() {
 
         {/* ── HIERARCHY VIEW TAB ── */}
         {tab === "hierarchy" && (
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[calc(100vh-260px)]">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="border-b border-slate-100 bg-slate-50 text-left">
                   <th className="w-8 px-3 py-3" />
                   {FLAT_HEADERS.map((h) => (

@@ -280,3 +280,160 @@ BEGIN
     DROP TABLE #LocationList
 END
 GO
+
+
+/****** Object:  StoredProcedure [Tran].[DashboardReport] ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- exec [Tran].[DashboardReport] @LocationIds='11',@FromDate='',@ToDate=''
+--
+-- Feeds the Dashboard tab KPI cards (app/dashboard — see renderDashboard() in
+-- GNC_Enterprise_Mockup.html for the card rules this mirrors). Returns two
+-- result sets:
+--   1) Sale-side metrics : TotalSaleAmount, TransactionCount, AvgSaleAmount,
+--      AvgUnitsPerTransaction, MultiVitaminsSold, FishOilSold, TotalTaxCollected
+--      -> Net Sales / Sale Transactions / Avg Sale Amount / Avg Units per
+--         Transaction / Multivitamins Sold / Fish Oil Sold / Total Tax Collected cards
+--   2) Return-side totals: TotalSaleAmount, TransactionCount
+--      -> Net Returns / Return Transactions cards
+--
+-- PRO Access, MyRewards and New Subscriptions cards come from the loyalty /
+-- subscription systems, not [Tran].[SaleTransaction] — out of scope here.
+CREATE OR ALTER PROCEDURE [Tran].[DashboardReport]
+    @LocationIds VARCHAR(MAX),
+    @FromDate    VARCHAR(30),
+    @ToDate      VARCHAR(30)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Test values (uncomment to debug):
+    --DECLARE @LocationIds VARCHAR(MAX) = '9973,6106'
+    --DECLARE @FromDate    VARCHAR(30)  = '08/01/2026 12:00am'
+    --DECLARE @ToDate      VARCHAR(30)  = '08/31/2026 11:59pm'
+
+    DECLARE @StartDateKey INT, @EndDateKey INT
+    DECLARE @FromDateDT DATETIME, @ToDateDT DATETIME
+    DECLARE @FilterByLocation BIT = 0
+
+    -- Normalise empty strings to NULL
+    IF @LocationIds = '' SET @LocationIds = NULL
+    IF @FromDate    = '' SET @FromDate    = NULL
+    IF @ToDate      = '' SET @ToDate      = NULL
+
+    -- Strip spaces from CSV
+    IF @LocationIds IS NOT NULL
+        SET @LocationIds = REPLACE(@LocationIds, ' ', '')
+
+    -- Apply date defaults
+    SET @FromDateDT = ISNULL(TRY_CAST(@FromDate AS DATETIME), '1/1/1970 1:00am')
+    SET @ToDateDT   = ISNULL(TRY_CAST(@ToDate   AS DATETIME), '1/1/2100 1:00am')
+
+    -- CONVERT style 112 (yyyyMMdd) — FORMAT() unsupported in Synapse
+    SET @StartDateKey = CAST(CONVERT(VARCHAR(8), @FromDateDT, 112) AS INT)
+    SET @EndDateKey   = CAST(CONVERT(VARCHAR(8), @ToDateDT,   112) AS INT)
+
+    -- Parse CSV into indexed temp table; JOIN is faster than correlated EXISTS
+    CREATE TABLE #LocationList (LocationId INT NOT NULL)
+
+    IF @LocationIds IS NOT NULL
+    BEGIN
+        SET @FilterByLocation = 1
+
+        DECLARE @List VARCHAR(MAX) = @LocationIds
+        DECLARE @Len  INT
+
+        WHILE LEN(@List) > 0
+        BEGIN
+            SELECT @Len = CASE CHARINDEX(',', @List)
+                              WHEN 0 THEN LEN(@List)
+                              ELSE CHARINDEX(',', @List) - 1
+                          END
+
+            INSERT INTO #LocationList (LocationId)
+            SELECT TRY_CAST(SUBSTRING(@List, 1, @Len) AS INT)
+            WHERE  TRY_CAST(SUBSTRING(@List, 1, @Len) AS INT) IS NOT NULL
+
+            SELECT @List = CASE LEN(@List) - @Len
+                               WHEN 0 THEN ''
+                               ELSE RIGHT(@List, LEN(@List) - @Len - 1)
+                           END
+        END
+
+        CREATE CLUSTERED INDEX CIX_LocationList ON #LocationList (LocationId)
+    END
+
+    -- ── Eligible sale/return line items for the period + locations ─────────
+    -- IsSale / IsReturn mirror the TranType derivation used in [Tran].[SalesReport]:
+    -- sm.Id IS NULL means the row isn't a named special mode (Cash In/Out, Void,
+    -- etc.) in IT.DimSaleModeType, so ProcessSubTypeId alone tells Sale (0) from
+    -- StandardReturn (99).
+    --
+    -- ItemDescription is assumed to live on SaleLineItem (same denormalised
+    -- pattern as sli.DealDescription in [dbo].[DealReport] above). If the real
+    -- schema instead carries description on an item master, replace the
+    -- category CASE expressions below with a join, e.g.:
+    --   LEFT JOIN [IT].[DimItem] di ON di.ItemCode = sli.ItemCode
+    -- and match on di.Description instead.
+    SELECT
+        st.TransactionNumber,
+        CASE WHEN sm.Id IS NULL AND st.ProcessSubTypeId = 0  THEN 1 ELSE 0 END AS IsSale,
+        CASE WHEN sm.Id IS NULL AND st.ProcessSubTypeId = 99 THEN 1 ELSE 0 END AS IsReturn,
+        sli.ExtendedSellingPrice,
+        sli.ExtendedTaxAmount,
+        sli.Quantity,
+        sli.ItemDescription
+    INTO #EligibleLines
+    FROM
+        [Tran].[SaleTransaction] st
+        INNER JOIN [Tran].[SaleLineItem] sli ON sli.TransactionNumber = st.TransactionNumber
+        LEFT  JOIN IT.[DimSaleModeType]  sm  ON sm.Id = st.SaleModeTypeId
+        LEFT  JOIN #LocationList         ll  ON ll.LocationId = st.LocationId
+    WHERE
+        st.DateKey             BETWEEN @StartDateKey AND @EndDateKey
+        AND st.TransactionTime BETWEEN @FromDateDT    AND @ToDateDT
+        AND (@FilterByLocation = 0 OR ll.LocationId IS NOT NULL)
+        AND sli.Voided        = 0
+        AND st.ProcessStateId = 8
+        AND st.SaleModeTypeId != 2
+
+    -- ── Result set 1: Sale-side dashboard metrics ───────────────────────────
+    -- Multivitamins / Fish Oil are netted across Sale + Return (a return of a
+    -- multivitamin should reduce the category total), matching categorySales()
+    -- in the mockup; Net Sales / Sale Transactions / Avg Sale Amount / Avg
+    -- Units per Transaction are Sale-only, matching the mockup's `sales` array.
+    SELECT
+        ISNULL(CONVERT(DECIMAL(18,4), SUM(CASE WHEN IsSale = 1 THEN ExtendedSellingPrice ELSE 0 END)), 0) AS TotalSaleAmount,
+        COUNT(DISTINCT CASE WHEN IsSale = 1 THEN TransactionNumber END)                                    AS TransactionCount,
+        ISNULL(CONVERT(DECIMAL(18,6),
+            SUM(CASE WHEN IsSale = 1 THEN ExtendedSellingPrice ELSE 0 END)
+            / NULLIF(COUNT(DISTINCT CASE WHEN IsSale = 1 THEN TransactionNumber END), 0)), 0)              AS AvgSaleAmount,
+        ISNULL(CONVERT(DECIMAL(18,6),
+            SUM(CASE WHEN IsSale = 1 THEN Quantity ELSE 0 END)
+            / NULLIF(COUNT(DISTINCT CASE WHEN IsSale = 1 THEN TransactionNumber END), 0)), 0)              AS AvgUnitsPerTransaction,
+        ISNULL(CONVERT(DECIMAL(18,4),
+            SUM(CASE WHEN (IsSale = 1 OR IsReturn = 1)
+                     AND (ItemDescription LIKE '%multi%'
+                          OR ItemDescription LIKE '%mega men%'
+                          OR ItemDescription LIKE '%healthy test vp%')
+                THEN ExtendedSellingPrice ELSE 0 END)), 0)                                                  AS MultiVitaminsSold,
+        ISNULL(CONVERT(DECIMAL(18,4),
+            SUM(CASE WHEN (IsSale = 1 OR IsReturn = 1)
+                     AND (ItemDescription LIKE '%fish oil%' OR ItemDescription LIKE '%omega%')
+                THEN ExtendedSellingPrice ELSE 0 END)), 0)                                                  AS FishOilSold,
+        ISNULL(CONVERT(DECIMAL(18,4),
+            SUM(CASE WHEN IsSale = 1 OR IsReturn = 1 THEN ExtendedTaxAmount ELSE 0 END)), 0)                AS TotalTaxCollected
+    FROM #EligibleLines
+
+    -- ── Result set 2: Return-side dashboard metrics ─────────────────────────
+    SELECT
+        ISNULL(CONVERT(DECIMAL(18,4), SUM(CASE WHEN IsReturn = 1 THEN ExtendedSellingPrice ELSE 0 END)), 0) AS TotalSaleAmount,
+        COUNT(DISTINCT CASE WHEN IsReturn = 1 THEN TransactionNumber END)                                   AS TransactionCount
+    FROM #EligibleLines
+
+    DROP TABLE #EligibleLines
+    DROP TABLE #LocationList
+END
+GO

@@ -5,6 +5,16 @@ import axios from "axios";
 import { Eye, EyeOff } from "lucide-react";
 import { API_BASE } from "@/lib/config";
 
+// Dev-only fallback session used when the backend/database is unreachable
+// (e.g. Azure SQL paused) so the dashboard UI stays reachable locally.
+const DEV_FALLBACK_USER = {
+  UserId: 0,
+  Username: "test.user",
+  RoleId: 1,
+  RoleName: "Administrator",
+  RegionIds: [],
+};
+
 export default function Home() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,14 +53,34 @@ export default function Home() {
         window.location.href = "/dashboard/sales-report";
       }, 800);
     } catch (error: unknown) {
-      setStatus("error");
-
       const safeError = error as {
         response?: { status?: number; data?: { message?: string } };
         message?: string;
       };
 
       const status = safeError?.response?.status;
+
+      // Backend/database is unreachable (not just a 401 for bad creds) —
+      // fall back to a local test session in dev so the dashboard is
+      // still usable while the server/database is down.
+      if (process.env.NODE_ENV !== "production" && status !== 401) {
+        localStorage.setItem("enterprise_auth_token", "dev-test-token");
+        localStorage.setItem(
+          "enterprise_user",
+          JSON.stringify(DEV_FALLBACK_USER),
+        );
+
+        setStatus("success");
+        setMessage(
+          "Server unreachable — continuing with a local test session.",
+        );
+        setTimeout(() => {
+          window.location.href = "/dashboard/sales-report";
+        }, 800);
+        return;
+      }
+
+      setStatus("error");
       setMessage(
         status === 401
           ? "Incorrect username or password. Please try again."

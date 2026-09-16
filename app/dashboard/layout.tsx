@@ -16,6 +16,8 @@ const pageTitles: Record<string, string> = {
   "/dashboard/authentication/users": "Users",
   "/dashboard/authentication/regions": "Regions",
   "/dashboard/authentication/change-password": "Change Password",
+  "/dashboard/portfolio/stores": "Stores",
+  "/dashboard/portfolio/users": "Users",
 };
 
 export default function DashboardLayout({
@@ -23,7 +25,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const pathname = usePathname();
   const title = pageTitles[pathname] ?? "Dashboard";
 

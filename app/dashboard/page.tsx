@@ -57,7 +57,7 @@ const STORE_GROUPS: Record<string, { label: string; stores: string[] }> = {
 
 // Shape of GET /api/Tran/getDashboardReportDummy — see DashboardReport.sql.
 // Table1 = sale-side metrics, Table2 = loyalty / subscription sign-ups,
-// Table3 = return-side totals. Each is a single-row array.
+// Table3 = prior-year comparison. Each is a single-row array.
 interface DashboardSaleMetrics {
   TotalSaleAmount: number;
   TransactionCount: number;
@@ -67,8 +67,6 @@ interface DashboardSaleMetrics {
   FishOilSold: number;
   TotalTaxCollected: number;
   TotalUnitsSold: number;
-  LastYearTotalSaleAmount: number;
-  LastYearTransactionCount: number;
 }
 interface DashboardLoyaltyMetrics {
   NewSubscriptions: number;
@@ -76,7 +74,13 @@ interface DashboardLoyaltyMetrics {
   ProAccess: number;
   CancelledSubscriptions: number;
 }
-interface DashboardReturnMetrics {
+// Despite the column names, TotalSaleAmount/TransactionCount here are LAST
+// YEAR's net sale $ / sale transaction count (same period, prior year) —
+// they feed the Net Sales / Sale Transactions cards' YoY comparison bars.
+// NewSubscriptions is THIS period's count again (same value as
+// DashboardLoyaltyMetrics.NewSubscriptions), not last year's — not
+// currently consumed separately, kept for shape completeness.
+interface DashboardLastYearMetrics {
   TotalSaleAmount: number;
   TransactionCount: number;
   NewSubscriptions: number;
@@ -84,30 +88,31 @@ interface DashboardReturnMetrics {
 interface DashboardReportResponse {
   Table1: DashboardSaleMetrics[];
   Table2: DashboardLoyaltyMetrics[];
-  Table3: DashboardReturnMetrics[];
+  Table3: DashboardLastYearMetrics[];
 }
 
 const fmt = (v: number) =>
   v.toLocaleString("en-US", { style: "currency", currency: "USD" });
+const fmtNum = (v: number) => Math.round(v).toLocaleString("en-US");
 const pctOr = (num: number, den: number) =>
   den ? `${((num / den) * 100).toFixed(1)}%` : "—";
 
 type RangeKey =
   | "today"
-  | "thisweek"
-  | "lastweek"
-  | "thismonth"
-  | "lastmonth"
-  | "thisyear"
+  | "this week"
+  | "last week"
+  | "this month"
+  | "last month"
+  | "this year"
   | "custom";
 
 const RANGE_OPTIONS: { value: RangeKey; label: string }[] = [
   { value: "today", label: "Today" },
-  { value: "thisweek", label: "This Week" },
-  { value: "lastweek", label: "Last Week" },
-  { value: "thismonth", label: "This Month" },
-  { value: "lastmonth", label: "Last Month" },
-  { value: "thisyear", label: "This Year" },
+  { value: "this week", label: "This Week" },
+  { value: "last week", label: "Last Week" },
+  { value: "this month", label: "This Month" },
+  { value: "last month", label: "Last Month" },
+  { value: "this year", label: "This Year" },
   { value: "custom", label: "Custom…" },
 ];
 
@@ -142,27 +147,27 @@ function resolveRange(key: RangeKey): { from: string; to: string } | null {
     case "today":
       from = to = new Date(y, m, d);
       break;
-    case "thisweek": {
+    case "this week": {
       const dow = (now.getDay() + 6) % 7; // 0 = Monday
       from = new Date(y, m, d - dow);
       to = new Date(y, m, d);
       break;
     }
-    case "lastweek": {
+    case "last week": {
       const dow = (now.getDay() + 6) % 7;
       from = new Date(y, m, d - dow - 7);
       to = new Date(y, m, d - dow - 1);
       break;
     }
-    case "thismonth":
+    case "this month":
       from = new Date(y, m, 1);
       to = new Date(y, m, d);
       break;
-    case "lastmonth":
+    case "last month":
       from = new Date(y, m - 1, 1);
       to = new Date(y, m, 0);
       break;
-    case "thisyear":
+    case "this year":
       from = new Date(y, 0, 1);
       to = new Date(y, m, d);
       break;
@@ -180,11 +185,11 @@ function resolveRange(key: RangeKey): { from: string; to: string } | null {
 // real procedure's actual convention is confirmed.
 const DATE_RANGE_TYPE_MAP: Record<Exclude<RangeKey, "custom">, string> = {
   today: "Today",
-  thisweek: "ThisWeek",
-  lastweek: "LastWeek",
-  thismonth: "ThisMonth",
-  lastmonth: "LastMonth",
-  thisyear: "ThisYear",
+  "this week": "This Week",
+  "last week": "Last Week",
+  "this month": "This Month",
+  "last month": "Last Month",
+  "this year": "This Year",
 };
 function toDateRangeType(key: RangeKey, from: string, to: string): string {
   if (key === "custom") {
@@ -516,31 +521,35 @@ export default function DashboardPage() {
   // (see DashboardReport.sql) — no client-side aggregation needed anymore.
   const sale = report?.Table1?.[0];
   const loyalty = report?.Table2?.[0];
-  const ret = report?.Table3?.[0];
+  const lastYear = report?.Table3?.[0];
 
   const netSales = sale?.TotalSaleAmount ?? 0;
   const saleTxnCount = sale?.TransactionCount ?? 0;
   const avgSale = sale?.AvgSaleAmount ?? 0;
   const avgUnits = sale?.AvgUnitsPerTransaction ?? 0;
-  const unitsSold = sale?.TotalUnitsSold ?? 0;
+  const unitsSold = sale?.TotalUnitsSold ?? sale?.TransactionCount ?? 0;
   const multiSales = sale?.MultiVitaminsSold ?? 0;
   const fishSales = sale?.FishOilSold ?? 0;
   const totalTax = sale?.TotalTaxCollected ?? 0;
-  const lyNetSales = sale?.LastYearTotalSaleAmount ?? 0;
-  const lySalesCount = sale?.LastYearTransactionCount ?? 0;
-
-  const netReturns = ret?.TotalSaleAmount ?? 0;
-  const returnTxnCount = ret?.TransactionCount ?? 0;
+  // Table3.TotalSaleAmount/TransactionCount are last year's figures despite
+  // the column names — see DashboardLastYearMetrics above.
+  const lyNetSales = lastYear?.TotalSaleAmount ?? 0;
+  const lySalesCount = lastYear?.TransactionCount ?? 0;
 
   const myRewardsSignups = loyalty?.MyRewards ?? 0;
   const proAccessSignups = loyalty?.ProAccess ?? 0;
   const newSubscriptions = loyalty?.NewSubscriptions ?? 0;
   const cancelledSubscriptions = loyalty?.CancelledSubscriptions ?? 0;
 
-  // The API doesn't expose a dedicated non-loyalty customer count, so total
-  // customer transactions (sale + return) stands in as the denominator for
-  // "Loyalty Sign-Up Opportunity %" until one is added.
-  const totalCustomerTxns = saleTxnCount + returnTxnCount;
+  // The API doesn't expose a dedicated non-loyalty customer count, so sale
+  // transaction count stands in as the denominator for "Loyalty Sign-Up
+  // Opportunity %" until one is added.
+
+  // There's no return-side data anywhere in this response (see
+  // DashboardReport.sql) — the card stays on screen showing $0 / 0 rather
+  // than disappearing, until a real return-data result set is added.
+  const netReturns = 0;
+  const returnTxnCount = 0;
 
   const kpis = {
     netSales,
@@ -553,7 +562,7 @@ export default function DashboardPage() {
     avgUnits,
     multiSales,
     fishSales,
-    nonLoyalty: totalCustomerTxns,
+    nonLoyalty: saleTxnCount,
     rewards: { myRewards: myRewardsSignups, pro: proAccessSignups },
     subs: { total: newSubscriptions, cancelled: cancelledSubscriptions },
     lyNetSales,
@@ -806,12 +815,12 @@ export default function DashboardPage() {
           icon={TrendingUp}
           accent="blue"
           label="Sale Transactions"
-          value={kpis.saleTxnCount}
+          value={fmtNum(kpis.saleTxnCount)}
         >
           <YoyBlock
             curVal={kpis.saleTxnCount}
             lyVal={kpis.lySalesCount}
-            fmtFn={(v) => v.toFixed(0)}
+            fmtFn={fmtNum}
             color="#1d4ed8"
           />
         </DbCard>
@@ -835,7 +844,7 @@ export default function DashboardPage() {
             <BreakRow
               icon={Box}
               label="Total Units Sold"
-              value={kpis.unitsSold}
+              value={fmtNum(kpis.unitsSold)}
               accent="green"
             />
           </div>
@@ -856,7 +865,7 @@ export default function DashboardPage() {
             <BreakRow
               icon={TrendingDown}
               label="Return Transactions"
-              value={kpis.returnTxnCount}
+              value={fmtNum(kpis.returnTxnCount)}
               accent="red"
             />
           </div>
@@ -866,7 +875,7 @@ export default function DashboardPage() {
           icon={Award}
           accent="green"
           label="MyRewards Signed Up"
-          value={kpis.rewards.myRewards ?? 0}
+          value={fmtNum(kpis.rewards.myRewards ?? 0)}
           sub="new sign-ups this period"
         >
           <div className="mt-2.5 w-full border-t border-slate-100 pt-2.5">
@@ -883,7 +892,7 @@ export default function DashboardPage() {
           icon={Crown}
           accent="pro"
           label="PRO Access Signed Up"
-          value={kpis.rewards.pro ?? 0}
+          value={fmtNum(kpis.rewards.pro ?? 0)}
           sub="new sign-ups this period"
         >
           <div className="mt-2.5 w-full border-t border-slate-100 pt-2.5">
@@ -900,14 +909,14 @@ export default function DashboardPage() {
           icon={Repeat}
           accent="teal"
           label="New Subscriptions"
-          value={kpis.subs.total ?? 0}
+          value={fmtNum(kpis.subs.total ?? 0)}
           sub="auto-delivery sign-ups"
         >
           <div className="mt-2.5 w-full border-t border-slate-100 pt-2.5">
             <BreakRow
               icon={X}
               label="Cancelled"
-              value={kpis.subs.cancelled ?? 0}
+              value={fmtNum(kpis.subs.cancelled ?? 0)}
               accent="teal"
             />
           </div>

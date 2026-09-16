@@ -14,15 +14,7 @@
    so the frontend doesn't need to change when this dummy version is swapped
    for the real [Tran].[DailyDashboard] later. None of the three are used to
    actually filter data here (there's no backing table to filter) — they're
-   accepted only to match the call signature:
-     @DateRangeType — a named range key ('Today','ThisWeek','LastWeek',
-       'ThisMonth','LastMonth','ThisYear'), or 'Custom:<from>:<to>' (ISO
-       dates) for a custom range — see toDateRangeType() in
-       app/dashboard/page.tsx. The real procedure's own convention for
-       encoding a custom range isn't known yet; update both sides together
-       once it's confirmed.
-     @LocationName — CSV of selected location ids, or NULL/blank for all.
-     @Debug — 1 returns fixed values instead of random ones.
+   accepted only to match the call signature.
 
    Column names, order, and result-set order were aligned to a reference
    capture from the real dataset (three result grids, shared alongside the
@@ -30,23 +22,34 @@
 
      1) Sale-side metrics : TotalSaleAmount, TransactionCount, AvgSaleAmount,
         AvgUnitsPerTransaction, MultiVitaminsSold, FishOilSold, TotalTaxCollected
-        — exact column set/order from the reference capture.
-        TotalUnitsSold, LastYearTotalSaleAmount, LastYearTransactionCount are
-        appended after (not present in the reference — kept as-is from the
-        prior version of this file, for the Total Units Sold breakdown and
-        the Net Sales / Sale Transactions YoY cards on app/dashboard/page.tsx).
+        — exact column set/order from the reference capture. TotalUnitsSold
+        is appended after (not present in the reference — kept as-is from a
+        prior version of this file, for the Total Units Sold breakdown row
+        on app/dashboard/page.tsx).
      2) Loyalty / subscriptions: NewSubscriptions, MyRewards, ProAccess
         — exact column set/order from the reference capture (note the
         renames: MyRewardsSignups -> MyRewards, ProAccessSignups -> ProAccess).
         CancelledSubscriptions is appended after (not present in the
         reference — kept as-is, feeds the New Subscriptions card's
         Cancelled breakdown row).
-     3) Return-side totals: TotalSaleAmount, TransactionCount, NewSubscriptions
-        — exact column set/order from the reference capture. NewSubscriptions
-        here mirrors the same value as result set 2's column of the same
-        name (a single draw, not a second independent one) since the
-        reference capture carries it on both result sets; flag if that's
-        not actually intentional on the real procedure.
+     3) Prior-year comparison: TotalSaleAmount, TransactionCount, NewSubscriptions
+        — column NAMES match the reference capture exactly, but despite
+        looking like a repeat of result set 1's first two columns and result
+        set 2's first column, the actual meaning (confirmed against the real
+        data) is:
+          TotalSaleAmount  -> LAST YEAR's net sale $ (same period, prior year)
+                              — feeds the Net Sales card's YoY comparison bar
+          TransactionCount -> LAST YEAR's sale transaction count
+                              — feeds the Sale Transactions card's YoY bar
+          NewSubscriptions -> THIS period's subscription count again (not
+                              last year) — same value as result set 2's
+                              NewSubscriptions column, just duplicated here;
+                              not consumed separately by the frontend today.
+        There is no return-side data (net returns $, return transaction
+        count) anywhere in this response — the Net Returns / Return
+        Transactions card on app/dashboard/page.tsx was removed since
+        nothing here feeds it. Add a dedicated result set if/when a real
+        return-data source is available.
 *******************************************************************/
 SET ANSI_NULLS ON
 GO
@@ -55,7 +58,7 @@ GO
 -- exec [dbo].[DashboardReport_Dummy] @DateRangeType='Today', @LocationName='', @Debug=0
 -- exec [dbo].[DashboardReport_Dummy] @DateRangeType='ThisMonth', @LocationName='01709,03683', @Debug=0
 -- exec [dbo].[DashboardReport_Dummy] @DateRangeType='Today', @LocationName='', @Debug=1  -- fixed values
-CREATE OR ALTER PROCEDURE [Tran].[DashboardReport_Dummy]
+CREATE OR ALTER PROCEDURE [dbo].[DashboardReport_Dummy]
     @DateRangeType VARCHAR(20)   = NULL,
     @LocationName  VARCHAR(8000) = NULL,
     @Debug         BIT           = 0
@@ -71,8 +74,6 @@ BEGIN
     DECLARE @TaxPct                  DECIMAL(9,6)
     DECLARE @YoySalesVariance        DECIMAL(9,6)
     DECLARE @YoyTxnVariance          DECIMAL(9,6)
-    DECLARE @ReturnPct               DECIMAL(9,6)
-    DECLARE @ReturnTxnCount          INT
     DECLARE @MyRewardsSignups        INT
     DECLARE @ProAccessSignups        INT
     DECLARE @NewSubscriptions        INT
@@ -88,10 +89,8 @@ BEGIN
         SET @MultiVitaminsPct       = 0.126460;  -- -> MultiVitaminsSold  14,493.8619
         SET @FishOilPct             = 0.026615;  -- -> FishOilSold        3,051.3212
         SET @TaxPct                 = 0.104568;  -- -> TotalTaxCollected 11,986.9159
-        SET @YoySalesVariance       = 0.006107;  -- -> LastYearTotalSaleAmount 113,933.5409
-        SET @YoyTxnVariance         = 0.151299;  -- -> LastYearTransactionCount 1,540
-        SET @ReturnPct              = 0.047368;  -- -> Return TotalSaleAmount (5,428.7360)
-        SET @ReturnTxnCount         = 55;
+        SET @YoySalesVariance       = 0.006107;  -- -> LastYear TotalSaleAmount  113,933.5409
+        SET @YoyTxnVariance         = 0.151299;  -- -> LastYear TransactionCount 1,540
         SET @MyRewardsSignups       = 14;
         SET @ProAccessSignups       = 2;
         SET @NewSubscriptions       = 3;
@@ -107,14 +106,10 @@ BEGIN
         SET @FishOilPct             = CAST(0.02   + (RAND(CHECKSUM(NEWID())) * 0.06)    AS DECIMAL(9,6)); -- 2% - 8% of sales
         SET @TaxPct                 = CAST(0.08   + (RAND(CHECKSUM(NEWID())) * 0.04)    AS DECIMAL(9,6)); -- 8% - 12% of sales
 
-        -- Year-over-year comparison (Net Sales / Sale Transactions cards'
-        -- YoY track): LastYear = current / (1 + variance), variance in -20%..+30%.
+        -- Prior-year comparison (Net Sales / Sale Transactions cards' YoY
+        -- track): LastYear = current / (1 + variance), variance in -20%..+30%.
         SET @YoySalesVariance = -0.20 + (RAND(CHECKSUM(NEWID())) * 0.50);
         SET @YoyTxnVariance   = -0.20 + (RAND(CHECKSUM(NEWID())) * 0.50);
-
-        -- ── Return-side random draws ─────────────────────────────────────
-        SET @ReturnPct      = CAST(0.02 + (RAND(CHECKSUM(NEWID())) * 0.06) AS DECIMAL(9,6)); -- 2% - 8% of sale $
-        SET @ReturnTxnCount = CAST(20   + (RAND(CHECKSUM(NEWID())) * 130)  AS INT);          -- 20 - 150
 
         -- ── Loyalty / subscription random draws ──────────────────────────
         SET @MyRewardsSignups       = CAST(1 + (RAND(CHECKSUM(NEWID())) * 14) AS INT); -- 1 - 15
@@ -132,9 +127,7 @@ BEGIN
         CONVERT(DECIMAL(18,4), @TotalSaleAmount * @MultiVitaminsPct)                         AS MultiVitaminsSold,
         CONVERT(DECIMAL(18,4), @TotalSaleAmount * @FishOilPct)                               AS FishOilSold,
         CONVERT(DECIMAL(18,4), @TotalSaleAmount * @TaxPct)                                   AS TotalTaxCollected,
-        CAST(ROUND(@AvgUnitsPerTransaction * @TransactionCount, 0) AS INT)                   AS TotalUnitsSold,
-        CONVERT(DECIMAL(18,4), @TotalSaleAmount / NULLIF(1 + @YoySalesVariance, 0))          AS LastYearTotalSaleAmount,
-        CAST(ROUND(@TransactionCount / NULLIF(1 + @YoyTxnVariance, 0), 0) AS INT)            AS LastYearTransactionCount
+        CAST(ROUND(@AvgUnitsPerTransaction * @TransactionCount, 0) AS INT)                   AS TotalUnitsSold
 
     -- ── Result set 2: Loyalty / subscription dashboard metrics ─────────────
     SELECT
@@ -143,10 +136,12 @@ BEGIN
         @ProAccessSignups                                                                    AS ProAccess,
         @CancelledSubscriptions                                                              AS CancelledSubscriptions
 
-    -- ── Result set 3: Return-side dashboard metrics ─────────────────────────
+    -- ── Result set 3: Prior-year comparison (see header note above for the
+    --    real meaning of each column — TotalSaleAmount/TransactionCount are
+    --    LAST YEAR's figures, NewSubscriptions is THIS period's again) ─────
     SELECT
-        CONVERT(DECIMAL(18,4), -1 * @TotalSaleAmount * @ReturnPct)                           AS TotalSaleAmount,
-        @ReturnTxnCount                                                                      AS TransactionCount,
+        CONVERT(DECIMAL(18,4), @TotalSaleAmount / NULLIF(1 + @YoySalesVariance, 0))          AS TotalSaleAmount,
+        CAST(ROUND(@TransactionCount / NULLIF(1 + @YoyTxnVariance, 0), 0) AS INT)            AS TransactionCount,
         @NewSubscriptions                                                                    AS NewSubscriptions
 END
 GO

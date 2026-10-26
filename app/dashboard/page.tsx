@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type ElementType } from "react";
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type ElementType,
+} from "react";
 import axios from "axios";
 import {
   Search,
@@ -326,7 +332,7 @@ export default function DashboardPage() {
   // non-empty at once.
   const [locationGroups, setLocationGroups] = useState<LocationGroupRow[]>([]);
   const [locationIds, setLocationIds] = useState<number[]>([]);
-  const [selectedGroup, setSelectedGroup] = useState("ALL"); // "" = none selected
+  const [selectedGroup, setSelectedGroup] = useState(""); // "" = none selected
   const [selectedLocationId, setSelectedLocationId] = useState(""); // "" = none selected
   const [locOpen, setLocOpen] = useState(false);
   const locRef = useRef<HTMLDivElement>(null);
@@ -355,6 +361,20 @@ export default function DashboardPage() {
   };
   const locationTriggerLabel =
     selectedGroup || selectedLocationId || "All Stores";
+
+  // Groups clustered by GroupLevel (ascending), each cluster's GroupNames
+  // sorted by SortOrder ascending — all of GroupLevel 1 first, then all of
+  // GroupLevel 2, etc., with a separator between clusters.
+  const groupsByLevel = Array.from(
+    new Set(locationGroups.map((g) => g.GroupLevel)),
+  )
+    .sort((a, b) => a - b)
+    .map((level) => ({
+      level,
+      groups: locationGroups
+        .filter((g) => g.GroupLevel === level)
+        .sort((a, b) => a.SortOrder - b.SortOrder),
+    }));
 
   useEffect(() => {
     axios
@@ -585,23 +605,31 @@ export default function DashboardPage() {
                     <li className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                       GROUPS
                     </li>
-                    {[...locationGroups]
-                      .sort((a, b) => a.SortOrder - b.SortOrder)
-                      .map((g) => (
-                        <li key={g.GroupName}>
-                          <label
-                            className={`flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs hover:bg-slate-50 transition-colors ${selectedGroup === g.GroupName ? "font-semibold text-[#E60D2E]" : "text-slate-700"}`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedGroup === g.GroupName}
-                              onChange={() => selectGroup(g.GroupName)}
-                              className="h-3.5 w-3.5 accent-[#E60D2E] shrink-0"
-                            />
-                            {g.GroupName}
-                          </label>
-                        </li>
-                      ))}
+                    {groupsByLevel.map(({ level, groups }, i) => (
+                      <Fragment key={level}>
+                        {i > 0 && (
+                          <li
+                            role="separator"
+                            className="my-1 border-t border-slate-100"
+                          />
+                        )}
+                        {groups.map((g) => (
+                          <li key={g.GroupName}>
+                            <label
+                              className={`flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs hover:bg-slate-50 transition-colors ${selectedGroup === g.GroupName ? "font-semibold text-[#E60D2E]" : "text-slate-700"}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedGroup === g.GroupName}
+                                onChange={() => selectGroup(g.GroupName)}
+                                className="h-3.5 w-3.5 accent-[#E60D2E] shrink-0"
+                              />
+                              {g.GroupName}
+                            </label>
+                          </li>
+                        ))}
+                      </Fragment>
+                    ))}
 
                     <li
                       role="separator"

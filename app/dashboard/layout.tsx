@@ -29,12 +29,14 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const title = pageTitles[pathname] ?? "Dashboard";
 
+  const toggleSidebar = () => setCollapsed((v) => !v);
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)} />
+      <Sidebar collapsed={collapsed} onToggle={toggleSidebar} />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Header title={title} />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <Header title={title} onMenuClick={toggleSidebar} />
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
       </div>
     </div>
   );

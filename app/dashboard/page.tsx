@@ -24,36 +24,24 @@ import {
 } from "lucide-react";
 import { API_BASE } from "@/lib/config";
 
-// Static store list for the location filter UI — swap for a real
-// store-master API call once one is available (KPI values themselves
-// already come from GET /api/Tran/getDashboardReportDummy below).
-const STORES = [
-  { Id: "01709", Name: "Store 01709" },
-  { Id: "02115", Name: "Store 02115" },
-  { Id: "03683", Name: "Store 03683" },
-  { Id: "04521", Name: "Store 04521" },
-  { Id: "05893", Name: "Store 05893" },
-  { Id: "06217", Name: "Store 06217" },
-  { Id: "07348", Name: "Store 07348" },
-  { Id: "08652", Name: "Store 08652" },
-];
-
-// Org-hierarchy rollups for the sample stores, so the location filter can
-// select a whole Corp/Fran/Division/Region group at once, not just single
-// stores. Real store-master data would drive this in production. Each
-// dimension partitions all 8 stores differently, so no two groups share
-// the exact same membership — otherwise checking one would always show an
-// unrelated group as checked too.
-const STORE_GROUPS: Record<string, { label: string; stores: string[] }> = {
-  corp: { label: "Corp Stores", stores: ["01709", "02115", "03683", "04521"] },
-  fran: { label: "Fran Stores", stores: ["05893", "06217", "07348", "08652"] },
-  div1: { label: "Division 1", stores: ["01709", "03683", "05893", "07348"] },
-  div2: { label: "Division 2", stores: ["02115", "04521", "06217", "08652"] },
-  dist1: { label: "District 1", stores: ["01709", "04521", "06217", "07348"] },
-  dist2: { label: "District 2", stores: ["02115", "03683", "05893", "08652"] },
-  reg1: { label: "Region 1", stores: ["01709", "02115", "05893", "08652"] },
-  reg2: { label: "Region 2", stores: ["03683", "04521", "06217", "07348"] },
-};
+// Shape of GET /api/Tran/getLocationGroups — see LocationGroups.sql.
+// Table1 = location groups, Table2 = location ids. The two are unrelated —
+// there's no hierarchy linking a GroupName to a LocationId, they're two
+// separate flat lookup lists, each its own independent filter.
+// Endpoint path below is a placeholder guess (naming matches
+// getDashboardReportDummy) — update once the real route is confirmed.
+interface LocationGroupRow {
+  GroupName: string;
+  GroupLevel: number;
+  SortOrder: number;
+}
+interface LocationIdRow {
+  LocationId: number;
+}
+interface LocationFiltersResponse {
+  Table1: LocationGroupRow[];
+  Table2: LocationIdRow[];
+}
 
 // Shape of GET /api/Tran/getDashboardReportDummy — see DashboardReport.sql.
 // Table1 = sale-side metrics, Table2 = loyalty / subscription sign-ups,
@@ -177,56 +165,29 @@ function resolveRange(key: RangeKey): { from: string; to: string } | null {
   return { from: toMMDDYYYY(from), to: toMMDDYYYY(to) };
 }
 
-// [Tran].[DailyDashboard] takes a single @DateRangeType instead of separate
-// From/To params, so the preset keys map straight across. There's no known
-// convention yet for passing a custom range through that one parameter —
-// this encodes it as "Custom:<fromISO>:<toISO>" as a placeholder; update
-// this (and the matching @Debug=1 branch in DashboardReport.sql) once the
-// real procedure's actual convention is confirmed.
-const DATE_RANGE_TYPE_MAP: Record<Exclude<RangeKey, "custom">, string> = {
+// [Tran].[DailyDashboard]'s @DateRangeType takes these preset keys directly;
+// a custom range is still @DateRangeType = 'Custom', with the actual bounds
+// going through @CustomStartDate/@CustomEndDate separately.
+const DATE_RANGE_TYPE_MAP: Record<RangeKey, string> = {
   today: "Today",
   "this week": "This Week",
   "last week": "Last Week",
   "this month": "This Month",
   "last month": "Last Month",
   "this year": "This Year",
+  custom: "Custom",
 };
-function toDateRangeType(key: RangeKey, from: string, to: string): string {
-  if (key === "custom") {
-    return `Custom:${mmddyyyyToISO(from)}:${mmddyyyyToISO(to)}`;
-  }
+function toDateRangeType(key: RangeKey): string {
   return DATE_RANGE_TYPE_MAP[key];
 }
 
-// A checkbox that also supports a visual "indeterminate" (partially
-// checked) state — not expressible as a plain prop in the DOM, so it's set
-// imperatively on the element. Renders a real controlled input (checked +
-// onChange) rather than a "readOnly" one wrapped in a clickable <button> —
-// the HTML `readonly` attribute has no effect on checkboxes/radios, so a
-// readOnly checkbox nested in a button can still toggle itself natively on
-// click, racing the button's own onClick and leaving the two out of sync.
-function TriCheckbox({
-  checked,
-  indeterminate = false,
-  onChange,
-}: {
-  checked: boolean;
-  indeterminate?: boolean;
-  onChange: () => void;
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = indeterminate;
-  }, [indeterminate]);
-  return (
-    <input
-      ref={ref}
-      type="checkbox"
-      checked={checked}
-      onChange={onChange}
-      className="h-3.5 w-3.5 accent-[#E60D2E] shrink-0"
-    />
-  );
+// @CustomStartDate / @CustomEndDate are sent as YYYYMMDD integers (e.g.
+// 20261001), not date strings — converts from the MM/DD/YYYY the date
+// inputs use. Returns undefined for an incomplete/empty date.
+function toYYYYMMDDInt(mmddyyyy: string): number | undefined {
+  const iso = mmddyyyyToISO(mmddyyyy);
+  if (!iso) return undefined;
+  return Number(iso.replace(/-/g, ""));
 }
 
 // ── Card building blocks ────────────────────────────────────────────
@@ -354,15 +315,19 @@ function DbCard({
   );
 }
 
-// Plain per-store selection state: true = selected, false = unselected.
-// Every store starts selected (== "All Stores").
-function allSelected(): Record<string, boolean> {
-  return Object.fromEntries(STORES.map((s) => [s.Id, true]));
-}
-
 export default function DashboardPage() {
-  const [selected, setSelected] =
-    useState<Record<string, boolean>>(allSelected);
+  // ── Location filter — one merged dropdown, single selection ─────────
+  // Group (LocationName) and Location (LocationId) are still unrelated
+  // filters underneath (see LocationGroups.sql — no shared key), but the
+  // UI now presents them as one control: "All Stores" / a Group / an
+  // individual Location, mutually exclusive. Selecting a group always
+  // clears the location id and vice versa — selectGroup()/selectLocation()
+  // below are the only setters used, so the two states can never both be
+  // non-empty at once.
+  const [locationGroups, setLocationGroups] = useState<LocationGroupRow[]>([]);
+  const [locationIds, setLocationIds] = useState<number[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState("ALL"); // "" = none selected
+  const [selectedLocationId, setSelectedLocationId] = useState(""); // "" = none selected
   const [locOpen, setLocOpen] = useState(false);
   const locRef = useRef<HTMLDivElement>(null);
 
@@ -376,6 +341,41 @@ export default function DashboardPage() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  const selectAllStores = () => {
+    setSelectedGroup("");
+    setSelectedLocationId("");
+  };
+  const selectGroup = (groupName: string) => {
+    setSelectedGroup(groupName);
+    setSelectedLocationId("");
+  };
+  const selectLocation = (id: number) => {
+    setSelectedLocationId(String(id));
+    setSelectedGroup("");
+  };
+  const locationTriggerLabel =
+    selectedGroup || selectedLocationId || "All Stores";
+
+  useEffect(() => {
+    axios
+      .get<LocationFiltersResponse>(`${API_BASE}/api/Tran/getLocationGroups`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("enterprise_auth_token") ?? ""}`,
+        },
+      })
+      .then((res) => {
+        setLocationGroups(res.data?.Table1 ?? []);
+        setLocationIds((res.data?.Table2 ?? []).map((r) => r.LocationId));
+      })
+      .catch((err) => {
+        // Surfaced to the console rather than swallowed silently — if the
+        // dropdowns are empty, check here (and the Network tab) for why:
+        // wrong path, CORS, an untrusted self-signed cert on
+        // https://localhost:44356, etc.
+        console.error("Failed to load location groups/ids:", err);
+      });
+  }, []);
+
   const [rangeKey, setRangeKey] = useState<RangeKey>("today");
   const initial = resolveRange("today")!;
   const [fromDate, setFromDate] = useState(initial.from);
@@ -384,9 +384,9 @@ export default function DashboardPage() {
   const customToRef = useRef<HTMLInputElement>(null);
 
   // Applied filters — only change when Search is clicked, matching the rest
-  // of the app's filter-bar behavior. The applied store selection itself
-  // doesn't need to be held in state — it's read straight off `selected`
-  // and sent to fetchDashboard() at the moment Search is clicked.
+  // of the app's filter-bar behavior. selectedGroup/selectedLocationId
+  // don't need a separate "applied" copy — they're read directly at the
+  // moment Search is clicked and sent to fetchDashboard() then.
   const [appliedFrom, setAppliedFrom] = useState(initial.from);
   const [appliedTo, setAppliedTo] = useState(initial.to);
 
@@ -395,9 +395,19 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Matches [Tran].[DailyDashboard]'s full signature: @DateRangeType,
+  // @LocationName, @Debug, @LocationId, @CustomStartDate, @CustomEndDate.
+  // @LocationName carries the Group filter's GroupName, @LocationId the
+  // Location filter's numeric id — the two are mutually exclusive (see
+  // selectGroup()/selectLocation() above), so whichever one isn't selected
+  // is sent as the literal value null rather than omitted, making that
+  // exclusivity explicit on the wire instead of implicit.
   const fetchDashboard = (params: {
     DateRangeType?: string;
     LocationName?: string;
+    LocationId?: number;
+    CustomStartDate?: number;
+    CustomEndDate?: number;
     Debug?: boolean;
   }) => {
     setLoading(true);
@@ -413,8 +423,13 @@ export default function DashboardPage() {
             ...(params.DateRangeType
               ? { DateRangeType: params.DateRangeType }
               : {}),
-            ...(params.LocationName
-              ? { LocationName: params.LocationName }
+            LocationName: params.LocationName ?? "null",
+            LocationId: params.LocationId ?? "null",
+            ...(params.CustomStartDate !== undefined
+              ? { CustomStartDate: params.CustomStartDate }
+              : {}),
+            ...(params.CustomEndDate !== undefined
+              ? { CustomEndDate: params.CustomEndDate }
               : {}),
             Debug: params.Debug ? 1 : 0,
           },
@@ -435,9 +450,7 @@ export default function DashboardPage() {
 
   // Initial load with the default ("Today") filters.
   useEffect(() => {
-    fetchDashboard({
-      DateRangeType: toDateRangeType("today", initial.from, initial.to),
-    });
+    fetchDashboard({ DateRangeType: toDateRangeType("today") });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -454,67 +467,21 @@ export default function DashboardPage() {
     setAppliedFrom(fromDate);
     setAppliedTo(toDate);
 
-    const chosenIds = STORES.filter((s) => selected[s.Id]).map((s) => s.Id);
+    // LocationName (Group) and LocationId (Location) are each a single
+    // scalar value — single-select, not multi-select, so there's never a
+    // CSV/array to join here. Leaving the unselected one as undefined here
+    // (not a placeholder string like "ALL") lets fetchDashboard()'s
+    // `?? "null"` fallback send it as the literal null — strictly enforcing
+    // that selecting one always nulls the other on the wire.
     fetchDashboard({
-      DateRangeType: toDateRangeType(rangeKey, fromDate, toDate),
-      LocationName:
-        chosenIds.length < STORES.length ? chosenIds.join(",") : undefined,
+      DateRangeType: toDateRangeType(rangeKey),
+      LocationName: selectedGroup || undefined,
+      LocationId: selectedLocationId ? Number(selectedLocationId) : undefined,
+      CustomStartDate:
+        rangeKey === "custom" ? toYYYYMMDDInt(fromDate) : undefined,
+      CustomEndDate: rangeKey === "custom" ? toYYYYMMDDInt(toDate) : undefined,
     });
   };
-
-  // The two lists a reader actually cares about — which stores are checked
-  // and which aren't — read directly off the plain selection object.
-  const selectedIds = STORES.filter((s) => selected[s.Id]).map((s) => s.Id);
-  const unselectedIds = STORES.filter((s) => !selected[s.Id]).map((s) => s.Id);
-
-  const toggleStore = (id: string) => {
-    setSelected((prev) => {
-      const next = { ...prev, [id]: !prev[id] };
-      const anySelected = STORES.some((s) => next[s.Id]);
-      return anySelected ? next : prev; // never allow zero stores selected
-    });
-  };
-
-  const isGroupChecked = (key: string) =>
-    STORE_GROUPS[key].stores.every((id) => selected[id]);
-  const isGroupIndeterminate = (key: string) => {
-    const members = STORE_GROUPS[key].stores;
-    const count = members.filter((id) => selected[id]).length;
-    return count > 0 && count < members.length;
-  };
-
-  const toggleGroup = (key: string) => {
-    const members = STORE_GROUPS[key].stores;
-    const full = isGroupChecked(key);
-    setSelected((prev) => {
-      const next = { ...prev };
-      members.forEach((id) => {
-        next[id] = !full;
-      });
-      const anySelected = STORES.some((s) => next[s.Id]);
-      return anySelected ? next : prev; // never allow zero stores selected
-    });
-  };
-
-  const locTriggerLabel = (() => {
-    if (selectedIds.length === STORES.length) return "All Stores";
-    if (selectedIds.length === 1) {
-      return (
-        STORES.find((l) => l.Id === selectedIds[0])?.Name ?? selectedIds[0]
-      );
-    }
-    const sorted = [...selectedIds].sort();
-    const matchKey = Object.keys(STORE_GROUPS).find((key) => {
-      const members = [...STORE_GROUPS[key].stores].sort();
-      return (
-        members.length === sorted.length &&
-        members.every((m, i) => m === sorted[i])
-      );
-    });
-    return matchKey
-      ? STORE_GROUPS[matchKey].label
-      : `${selectedIds.length} Stores selected`;
-  })();
 
   // ── KPI values straight off the API response ────────────────────────
   // Every Table is a single summary row for the currently applied filters
@@ -574,7 +541,10 @@ export default function DashboardPage() {
       {/* Filter bar */}
       <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
         <div className="flex flex-wrap items-end gap-4">
-          {/* Store multi-select */}
+          {/* Location filter — one dropdown merging All Stores / Groups /
+              Individual Stores. Checkbox-styled but single-select: picking
+              any item clears the other two sections (selectAllStores /
+              selectGroup / selectLocation all enforce that). */}
           <div className="flex flex-col gap-1.5 min-w-[200px]">
             <label className="text-xs font-medium text-slate-600">
               Location
@@ -585,29 +555,10 @@ export default function DashboardPage() {
                 onClick={() => setLocOpen((v) => !v)}
                 className="flex h-9 w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-[#E60D2E] focus:ring-2 focus:ring-[#E60D2E]/20 transition"
               >
-                <span
-                  className={
-                    unselectedIds.length > 0
-                      ? "text-slate-900"
-                      : "text-slate-400"
-                  }
-                >
-                  {locTriggerLabel}
-                </span>
-                <div className="flex items-center gap-1">
-                  {unselectedIds.length > 0 && (
-                    <X
-                      className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelected(allSelected());
-                      }}
-                    />
-                  )}
-                  <ChevronDown
-                    className={`h-3.5 w-3.5 text-slate-400 transition-transform ${locOpen ? "rotate-180" : ""}`}
-                  />
-                </div>
+                <span>{locationTriggerLabel}</span>
+                <ChevronDown
+                  className={`h-3.5 w-3.5 text-slate-400 transition-transform ${locOpen ? "rotate-180" : ""}`}
+                />
               </button>
 
               {locOpen && (
@@ -615,16 +566,15 @@ export default function DashboardPage() {
                   <ul className="max-h-80 overflow-y-auto py-1">
                     <li>
                       <label
-                        className={`flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs hover:bg-slate-50 transition-colors ${unselectedIds.length === 0 ? "font-semibold text-[#E60D2E]" : "text-slate-600"}`}
+                        className={`flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs hover:bg-slate-50 transition-colors ${!selectedGroup && !selectedLocationId ? "font-semibold text-[#E60D2E]" : "text-slate-600"}`}
                       >
-                        <TriCheckbox
-                          checked={unselectedIds.length === 0}
-                          indeterminate={
-                            selectedIds.length > 0 && unselectedIds.length > 0
-                          }
-                          onChange={() => setSelected(allSelected())}
+                        <input
+                          type="checkbox"
+                          checked={!selectedGroup && !selectedLocationId}
+                          onChange={selectAllStores}
+                          className="h-3.5 w-3.5 accent-[#E60D2E] shrink-0"
                         />
-                        <strong>All Stores</strong>
+                        <strong>ALL STORES</strong>
                       </label>
                     </li>
 
@@ -633,50 +583,48 @@ export default function DashboardPage() {
                       className="my-1 border-t border-slate-100"
                     />
                     <li className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                      Groups
+                      GROUPS
                     </li>
-                    {Object.entries(STORE_GROUPS).map(([key, group]) => {
-                      const checked = isGroupChecked(key);
-                      const indeterminate = isGroupIndeterminate(key);
-                      return (
-                        <li key={key}>
+                    {[...locationGroups]
+                      .sort((a, b) => a.SortOrder - b.SortOrder)
+                      .map((g) => (
+                        <li key={g.GroupName}>
                           <label
-                            className={`flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs hover:bg-slate-50 transition-colors ${checked ? "font-semibold text-[#E60D2E]" : "text-slate-700"}`}
+                            className={`flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs hover:bg-slate-50 transition-colors ${selectedGroup === g.GroupName ? "font-semibold text-[#E60D2E]" : "text-slate-700"}`}
                           >
-                            <TriCheckbox
-                              checked={checked}
-                              indeterminate={indeterminate}
-                              onChange={() => toggleGroup(key)}
+                            <input
+                              type="checkbox"
+                              checked={selectedGroup === g.GroupName}
+                              onChange={() => selectGroup(g.GroupName)}
+                              className="h-3.5 w-3.5 accent-[#E60D2E] shrink-0"
                             />
-                            {group.label}
+                            {g.GroupName}
                           </label>
                         </li>
-                      );
-                    })}
+                      ))}
 
                     <li
                       role="separator"
                       className="my-1 border-t border-slate-100"
                     />
                     <li className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                      Individual Stores
+                      INDIVIDUAL STORES
                     </li>
-                    {STORES.map((loc) => {
-                      const checked = selectedIds.includes(loc.Id);
-                      return (
-                        <li key={loc.Id}>
-                          <label
-                            className={`flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs hover:bg-slate-50 transition-colors ${checked ? "font-semibold text-[#E60D2E]" : "text-slate-700"}`}
-                          >
-                            <TriCheckbox
-                              checked={checked}
-                              onChange={() => toggleStore(loc.Id)}
-                            />
-                            {loc.Id + " – " + loc.Name}
-                          </label>
-                        </li>
-                      );
-                    })}
+                    {locationIds.map((id) => (
+                      <li key={id}>
+                        <label
+                          className={`flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs hover:bg-slate-50 transition-colors ${selectedLocationId === String(id) ? "font-semibold text-[#E60D2E]" : "text-slate-700"}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedLocationId === String(id)}
+                            onChange={() => selectLocation(id)}
+                            className="h-3.5 w-3.5 accent-[#E60D2E] shrink-0"
+                          />
+                          {id}
+                        </label>
+                      </li>
+                    ))}
                   </ul>
                 </div>
               )}

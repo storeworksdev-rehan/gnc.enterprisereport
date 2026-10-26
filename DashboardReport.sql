@@ -10,11 +10,21 @@
 
    Parameter list mirrors the real procedure's signature exactly:
      ALTER PROCEDURE [Tran].DailyDashboard
-         (@DateRangeType varchar(20), @LocationName varchar(8000), @Debug bit)
+         (@DateRangeType varchar(20), @LocationName varchar(8000), @Debug bit,
+          @LocationId int, @CustomStartDate int, @CustomEndDate int)
    so the frontend doesn't need to change when this dummy version is swapped
-   for the real [Tran].[DailyDashboard] later. None of the three are used to
+   for the real [Tran].[DailyDashboard] later. None of these are used to
    actually filter data here (there's no backing table to filter) — they're
    accepted only to match the call signature.
+
+   @LocationName carries the selected Group filter's GroupName (see
+   LocationGroups.sql), @LocationId the selected Location filter's numeric
+   id — the two are unrelated filters on app/dashboard/page.tsx, not a
+   parent/child pair, despite the "Location" in both names.
+
+   @CustomStartDate / @CustomEndDate are only meaningful when
+   @DateRangeType = 'Custom', and are sent as YYYYMMDD integers (e.g.
+   20261001), not dates — matching toYYYYMMDDInt() in app/dashboard/page.tsx.
 
    Column names, order, and result-set order were aligned to a reference
    capture from the real dataset (three result grids, shared alongside the
@@ -56,12 +66,16 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 -- exec [dbo].[DashboardReport_Dummy] @DateRangeType='Today', @LocationName='', @Debug=0
--- exec [dbo].[DashboardReport_Dummy] @DateRangeType='ThisMonth', @LocationName='01709,03683', @Debug=0
+-- exec [dbo].[DashboardReport_Dummy] @DateRangeType='ThisMonth', @LocationName='Division 1', @LocationId=1017, @Debug=0
+-- exec [dbo].[DashboardReport_Dummy] @DateRangeType='Custom', @CustomStartDate=20261001, @CustomEndDate=20261010, @Debug=0
 -- exec [dbo].[DashboardReport_Dummy] @DateRangeType='Today', @LocationName='', @Debug=1  -- fixed values
 CREATE OR ALTER PROCEDURE [dbo].[DashboardReport_Dummy]
-    @DateRangeType VARCHAR(20)   = NULL,
-    @LocationName  VARCHAR(8000) = NULL,
-    @Debug         BIT           = 0
+    @DateRangeType   VARCHAR(20)   = NULL,
+    @LocationName    VARCHAR(8000) = NULL,
+    @Debug           BIT           = 0,
+    @LocationId      INT           = NULL,
+    @CustomStartDate INT           = NULL,
+    @CustomEndDate   INT           = NULL
 AS
 BEGIN
     SET NOCOUNT ON;

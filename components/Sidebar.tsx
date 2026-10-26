@@ -69,16 +69,31 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     }`;
 
   return (
-    // Outer wrapper is never clipped, so the toggle button stays visible
-    // and clickable even while the <aside> below is collapsed to 0 width —
-    // only the aside (and its fixed-width inner content) clips/slides away.
-    <div className="relative h-full shrink-0">
-      <aside
-        className={`h-full overflow-hidden bg-[#1a1a1a] transition-all duration-300 ${
-          collapsed ? "w-0" : "w-60 border-r border-[#2e2e2e]"
-        }`}
-      >
-        <div className="flex h-full w-60 flex-col">
+    <>
+      {/* Mobile backdrop — tapping it closes the drawer. Desktop never
+          shows this; there the sidebar pushes content instead of overlaying it. */}
+      {!collapsed && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          onClick={onToggle}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Outer wrapper is never clipped, so the desktop toggle button stays
+          visible and clickable even while the <aside> below is collapsed to
+          0 width — only the aside (and its fixed-width inner content)
+          clips/slides away. On mobile the aside is taken out of flow
+          (fixed), so this wrapper reserves no layout space there. */}
+      <div className="relative h-full shrink-0">
+        <aside
+          className={`fixed inset-y-0 left-0 z-40 h-full w-64 overflow-hidden bg-[#1a1a1a] transition-transform duration-300 lg:static lg:z-auto lg:w-auto lg:translate-x-0 lg:transition-all ${
+            collapsed
+              ? "-translate-x-full lg:w-0"
+              : "translate-x-0 lg:w-60 lg:border-r lg:border-[#2e2e2e]"
+          }`}
+        >
+          <div className="flex h-full w-64 flex-col lg:w-60">
           {/* Brand */}
           <div className="flex h-16 items-center gap-3 border-b border-[#2e2e2e] px-4">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#E60D2E]">
@@ -207,10 +222,12 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
       </aside>
 
-      {/* Toggle button */}
+      {/* Toggle button — desktop only; mobile toggles via the Header
+          hamburger instead, since this button's offset parent collapses to
+          0 width on mobile (fixed drawer), making it unreachable there. */}
       <button
         onClick={onToggle}
-        className="absolute -right-3 top-20 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm hover:bg-slate-50 transition-colors"
+        className="absolute -right-3 top-20 z-10 hidden h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm hover:bg-slate-50 transition-colors lg:flex"
         aria-label={collapsed ? "Show sidebar" : "Hide sidebar"}
       >
         {collapsed ? (
@@ -219,6 +236,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <ChevronLeft className="h-3 w-3 text-slate-600" />
         )}
       </button>
-    </div>
+      </div>
+    </>
   );
 }

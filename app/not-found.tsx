@@ -14,7 +14,10 @@ export default function NotFound() {
     <div className="flex h-screen overflow-hidden bg-slate-50">
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)} />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Header title="Page Not Found" />
+        <Header
+          title="Page Not Found"
+          onMenuClick={() => setCollapsed((v) => !v)}
+        />
         <main className="flex flex-1 items-center justify-center p-6">
           <div className="flex flex-col items-center text-center">
             {/* Large 404 */}

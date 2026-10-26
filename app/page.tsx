@@ -1,94 +1,58 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import axios from "axios";
 import { Eye, EyeOff } from "lucide-react";
-import { API_BASE } from "@/lib/config";
 
-// Dev-only fallback session used when the backend/database is unreachable
-// (e.g. Azure SQL paused) so the dashboard UI stays reachable locally.
-const DEV_FALLBACK_USER = {
+// Login is static for now — no backend call. Any submit with these
+// prefilled credentials signs in as this fixed session. Swap back to a real
+// /api/auth/login call once the auth API is ready.
+const DEFAULT_CREDENTIALS = {
+  email: "admin@gnc.com",
+  password: "Admin@123",
+};
+const STATIC_USER = {
   UserId: 0,
-  Username: "test.user",
+  Username: "admin@gnc.com",
   RoleId: 1,
   RoleName: "Administrator",
   RegionIds: [],
 };
 
 export default function Home() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(DEFAULT_CREDENTIALS.email);
+  const [password, setPassword] = useState(DEFAULT_CREDENTIALS.password);
   const [showPassword, setShowPassword] = useState(false);
   const [status, setStatus] = useState<
     "idle" | "loading" | "success" | "error"
   >("idle");
   const [message, setMessage] = useState<string>("");
 
-  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+  const handleLogin = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setStatus("loading");
     setMessage("");
 
+    // localStorage.setItem throws in Safari Private Browsing (quota is set
+    // to 0 there) — every other browser just no-ops, so this was never hit
+    // in testing elsewhere. Without the try/catch, that throw stops
+    // execution right after setStatus("loading"), leaving the button stuck
+    // on "Signing in…" forever. Login is static anyway, so proceed to the
+    // dashboard regardless of whether the session persisted.
     try {
-      const response = await axios.post(`${API_BASE}/api/auth/login`, {
-        username: email,
-        password: password,
-      });
-
-      const { token, UserId, Username, RoleId, RoleName, RegionIds } =
-        response?.data ?? {};
-      if (token) {
-        localStorage.setItem("enterprise_auth_token", token);
-      }
-      if (UserId !== undefined) {
-        localStorage.setItem(
-          "enterprise_user",
-          JSON.stringify({ UserId, Username, RoleId, RoleName, RegionIds }),
-        );
-      }
-
-      setStatus("success");
-      setMessage("Login successful. Redirecting…");
-      setTimeout(() => {
-        window.location.href = "/dashboard/sales-report";
-      }, 800);
-    } catch (error: unknown) {
-      const safeError = error as {
-        response?: { status?: number; data?: { message?: string } };
-        message?: string;
-      };
-
-      const status = safeError?.response?.status;
-
-      // Backend/database is unreachable (not just a 401 for bad creds) —
-      // fall back to a local test session in dev so the dashboard is
-      // still usable while the server/database is down.
-      if (process.env.NODE_ENV !== "production" && status !== 401) {
-        localStorage.setItem("enterprise_auth_token", "dev-test-token");
-        localStorage.setItem(
-          "enterprise_user",
-          JSON.stringify(DEV_FALLBACK_USER),
-        );
-
-        setStatus("success");
-        setMessage(
-          "Server unreachable — continuing with a local test session.",
-        );
-        setTimeout(() => {
-          window.location.href = "/dashboard/sales-report";
-        }, 800);
-        return;
-      }
-
-      setStatus("error");
-      setMessage(
-        status === 401
-          ? "Incorrect username or password. Please try again."
-          : safeError?.response?.data?.message ||
-              safeError?.message ||
-              "Login failed. Check your credentials or API server status.",
+      localStorage.setItem("enterprise_auth_token", "static-session-token");
+      localStorage.setItem(
+        "enterprise_user",
+        JSON.stringify({ ...STATIC_USER, Username: email || STATIC_USER.Username }),
       );
+    } catch {
+      // ignore — see comment above
     }
+
+    setStatus("success");
+    setMessage("Login successful. Redirecting…");
+    setTimeout(() => {
+      window.location.href = "/dashboard";
+    }, 500);
   };
 
   return (
@@ -118,8 +82,8 @@ export default function Home() {
 
         <div>
           <blockquote className="text-slate-300 text-xl font-light leading-relaxed">
-            "Centralised reporting and analytics built for enterprise-scale
-            operations."
+            &ldquo;Centralised reporting and analytics built for
+            enterprise-scale operations.&rdquo;
           </blockquote>
           <p className="mt-4 text-slate-500 text-sm">
             GNC Enterprise Platform &mdash; Internal Use Only

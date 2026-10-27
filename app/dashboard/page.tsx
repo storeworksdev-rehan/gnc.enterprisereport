@@ -88,6 +88,11 @@ interface DashboardReportResponse {
 const fmt = (v: number) =>
   v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 const fmtNum = (v: number) => Math.round(v).toLocaleString("en-US");
+// Display-only padding for individual store ids — e.g. 1111 -> "01111",
+// 63 -> "00063". The underlying value sent to the API stays the raw
+// number; this only affects the text shown in the dropdown/trigger.
+const padLocationId = (id: number | string) =>
+  String(id).padStart(5, "0");
 const pctOr = (num: number, den: number) =>
   den ? `${((num / den) * 100).toFixed(1)}%` : "—";
 
@@ -360,7 +365,9 @@ export default function DashboardPage() {
     setSelectedGroup("");
   };
   const locationTriggerLabel =
-    selectedGroup || selectedLocationId || "All Stores";
+    selectedGroup ||
+    (selectedLocationId ? padLocationId(selectedLocationId) : "") ||
+    "All Stores";
 
   // Groups clustered by GroupLevel (ascending), each cluster's GroupNames
   // sorted by SortOrder ascending — all of GroupLevel 1 first, then all of
@@ -649,7 +656,7 @@ export default function DashboardPage() {
                             onChange={() => selectLocation(id)}
                             className="h-3.5 w-3.5 accent-[#E60D2E] shrink-0"
                           />
-                          {id}
+                          {padLocationId(id)}
                         </label>
                       </li>
                     ))}

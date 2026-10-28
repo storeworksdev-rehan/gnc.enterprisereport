@@ -369,6 +369,20 @@ export default function DashboardPage() {
     (selectedLocationId ? padLocationId(selectedLocationId) : "") ||
     "All Stores";
 
+  // Resolves the current Location filter selection into the LocationName /
+  // LocationId pair to send to the API: a Group sends its name (LocationId
+  // null), a Location sends its id (LocationName null), and "All Stores" —
+  // neither selected — sends the literal "ALL" for both rather than null.
+  const locationFilterParams = (): {
+    LocationName: string;
+    LocationId: number | string;
+  } => {
+    if (selectedGroup) return { LocationName: selectedGroup, LocationId: "null" };
+    if (selectedLocationId)
+      return { LocationName: "null", LocationId: Number(selectedLocationId) };
+    return { LocationName: "ALL", LocationId: "ALL" };
+  };
+
   // Groups clustered by GroupLevel (ascending), each cluster's GroupNames
   // sorted by SortOrder ascending — all of GroupLevel 1 first, then all of
   // GroupLevel 2, etc., with a separator between clusters.
@@ -432,7 +446,7 @@ export default function DashboardPage() {
   const fetchDashboard = (params: {
     DateRangeType?: string;
     LocationName?: string;
-    LocationId?: number;
+    LocationId?: number | string;
     CustomStartDate?: number;
     CustomEndDate?: number;
     Debug?: boolean;
@@ -475,9 +489,14 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   };
 
-  // Initial load with the default ("Today") filters.
+  // Initial load with the default ("Today") filters — Location defaults to
+  // "All Stores" (neither Group nor Location selected yet), so this sends
+  // LocationName/LocationId as "ALL", same as explicitly picking it.
   useEffect(() => {
-    fetchDashboard({ DateRangeType: toDateRangeType("today") });
+    fetchDashboard({
+      DateRangeType: toDateRangeType("today"),
+      ...locationFilterParams(),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -496,14 +515,12 @@ export default function DashboardPage() {
 
     // LocationName (Group) and LocationId (Location) are each a single
     // scalar value — single-select, not multi-select, so there's never a
-    // CSV/array to join here. Leaving the unselected one as undefined here
-    // (not a placeholder string like "ALL") lets fetchDashboard()'s
-    // `?? "null"` fallback send it as the literal null — strictly enforcing
-    // that selecting one always nulls the other on the wire.
+    // CSV/array to join here. locationFilterParams() enforces the mutual
+    // exclusivity on the wire: a Group nulls LocationId, a Location nulls
+    // LocationName, and "All Stores" (neither selected) sends "ALL" for both.
     fetchDashboard({
       DateRangeType: toDateRangeType(rangeKey),
-      LocationName: selectedGroup || undefined,
-      LocationId: selectedLocationId ? Number(selectedLocationId) : undefined,
+      ...locationFilterParams(),
       CustomStartDate:
         rangeKey === "custom" ? toYYYYMMDDInt(fromDate) : undefined,
       CustomEndDate: rangeKey === "custom" ? toYYYYMMDDInt(toDate) : undefined,

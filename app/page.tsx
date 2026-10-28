@@ -7,8 +7,8 @@ import { Eye, EyeOff } from "lucide-react";
 // prefilled credentials signs in as this fixed session. Swap back to a real
 // /api/auth/login call once the auth API is ready.
 const DEFAULT_CREDENTIALS = {
-  email: "admin@gnc.com",
-  password: "Admin@123",
+  email: "",
+  password: "",
 };
 const STATIC_USER = {
   UserId: 0,
@@ -34,7 +34,10 @@ export default function Home() {
     // Login is static, but credentials are still required to match the
     // default ones exactly — this isn't a real auth check, just a gate so
     // a blank/typo'd submit doesn't silently "succeed".
-    if (email !== DEFAULT_CREDENTIALS.email || password !== DEFAULT_CREDENTIALS.password) {
+    if (
+      email !== DEFAULT_CREDENTIALS.email ||
+      password !== DEFAULT_CREDENTIALS.password
+    ) {
       setStatus("error");
       setMessage("Invalid email or password.");
       return;
@@ -52,7 +55,10 @@ export default function Home() {
       localStorage.setItem("enterprise_auth_token", "static-session-token");
       localStorage.setItem(
         "enterprise_user",
-        JSON.stringify({ ...STATIC_USER, Username: email || STATIC_USER.Username }),
+        JSON.stringify({
+          ...STATIC_USER,
+          Username: email || STATIC_USER.Username,
+        }),
       );
     } catch {
       // ignore — see comment above

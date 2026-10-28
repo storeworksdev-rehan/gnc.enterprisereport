@@ -372,7 +372,8 @@ export default function DashboardPage() {
   // Resolves the current Location filter selection into the LocationName /
   // LocationId pair to send to the API: a Group sends its name (LocationId
   // null), a Location sends its id (LocationName null), and "All Stores" —
-  // neither selected — sends the literal "ALL" for both rather than null.
+  // neither selected — sends the literal "ALL" for LocationName only;
+  // LocationId stays null.
   const locationFilterParams = (): {
     LocationName: string;
     LocationId: number | string;
@@ -380,7 +381,7 @@ export default function DashboardPage() {
     if (selectedGroup) return { LocationName: selectedGroup, LocationId: "null" };
     if (selectedLocationId)
       return { LocationName: "null", LocationId: Number(selectedLocationId) };
-    return { LocationName: "ALL", LocationId: "ALL" };
+    return { LocationName: "ALL", LocationId: "null" };
   };
 
   // Groups clustered by GroupLevel (ascending), each cluster's GroupNames

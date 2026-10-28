@@ -222,12 +222,12 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
       </aside>
 
-      {/* Toggle button — desktop only; mobile toggles via the Header
-          hamburger instead, since this button's offset parent collapses to
-          0 width on mobile (fixed drawer), making it unreachable there. */}
+      {/* Toggle button hidden for now (desktop + mobile) — onToggle stays
+          wired via the mobile backdrop so re-enabling this is a one-line
+          className change (add back "lg:flex"). */}
       <button
         onClick={onToggle}
-        className="absolute -right-3 top-20 z-10 hidden h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm hover:bg-slate-50 transition-colors lg:flex"
+        className="absolute -right-3 top-20 z-10 hidden h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm hover:bg-slate-50 transition-colors"
         aria-label={collapsed ? "Show sidebar" : "Hide sidebar"}
       >
         {collapsed ? (

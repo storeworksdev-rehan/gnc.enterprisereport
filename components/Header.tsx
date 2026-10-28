@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { ChevronDown, LogOut, KeyRound, Menu } from "lucide-react";
+import { ChevronDown, LogOut, KeyRound } from "lucide-react";
 
 interface HeaderProps {
   title: string;
@@ -16,7 +16,7 @@ interface StoredUser {
   RoleName: string;
 }
 
-export default function Header({ title, onMenuClick }: HeaderProps) {
+export default function Header({ title }: HeaderProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<StoredUser | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -52,15 +52,8 @@ export default function Header({ title, onMenuClick }: HeaderProps) {
 
   return (
     <header className="flex h-16 items-center justify-between gap-3 border-b border-slate-200 bg-[#1a1a1a] px-4 sm:px-6">
-      {/* Hamburger (mobile only) + title */}
+      {/* Hamburger hidden for now — onMenuClick kept wired on Header/Sidebar/layout for easy re-enable */}
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <button
-          onClick={onMenuClick}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white transition-colors lg:hidden"
-          aria-label="Toggle menu"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
         <h1 className="truncate text-base font-semibold text-white">
           {title}
         </h1>

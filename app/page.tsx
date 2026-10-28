@@ -29,8 +29,18 @@ export default function Home() {
 
   const handleLogin = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setStatus("loading");
     setMessage("");
+
+    // Login is static, but credentials are still required to match the
+    // default ones exactly — this isn't a real auth check, just a gate so
+    // a blank/typo'd submit doesn't silently "succeed".
+    if (email !== DEFAULT_CREDENTIALS.email || password !== DEFAULT_CREDENTIALS.password) {
+      setStatus("error");
+      setMessage("Invalid email or password.");
+      return;
+    }
+
+    setStatus("loading");
 
     // localStorage.setItem throws in Safari Private Browsing (quota is set
     // to 0 there) — every other browser just no-ops, so this was never hit

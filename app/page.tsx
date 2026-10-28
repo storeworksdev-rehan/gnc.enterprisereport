@@ -7,8 +7,8 @@ import { Eye, EyeOff } from "lucide-react";
 // prefilled credentials signs in as this fixed session. Swap back to a real
 // /api/auth/login call once the auth API is ready.
 const DEFAULT_CREDENTIALS = {
-  email: "",
-  password: "",
+  email: "admin@gnc.com",
+  password: "Admin@123",
 };
 const STATIC_USER = {
   UserId: 0,
@@ -19,8 +19,8 @@ const STATIC_USER = {
 };
 
 export default function Home() {
-  const [email, setEmail] = useState(DEFAULT_CREDENTIALS.email);
-  const [password, setPassword] = useState(DEFAULT_CREDENTIALS.password);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [status, setStatus] = useState<
     "idle" | "loading" | "success" | "error"
